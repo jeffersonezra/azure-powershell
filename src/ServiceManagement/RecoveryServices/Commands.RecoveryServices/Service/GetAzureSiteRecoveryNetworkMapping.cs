@@ -26,6 +26,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryNetworkMapping")]
     [OutputType(typeof(IEnumerable<ASRNetworkMapping>))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class GetAzureSiteRecoveryNetworkMapping : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -58,6 +61,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 string primaryServerId = this.PrimaryServer.ID;
                 string recoveryServerId = string.Empty;
 

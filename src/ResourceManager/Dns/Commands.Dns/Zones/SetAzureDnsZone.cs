@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,10 +12,10 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Dns.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Collections;
 using System.Management.Automation;
-using Microsoft.Azure.Commands.Dns.Models;
-
 using ProjectResources = Microsoft.Azure.Commands.Dns.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.Dns
@@ -23,7 +23,7 @@ namespace Microsoft.Azure.Commands.Dns
     /// <summary>
     /// Updates an existing zone.
     /// </summary>
-    [Cmdlet(VerbsCommon.Set, "AzureDnsZone"), OutputType(typeof(DnsZone))]
+    [Cmdlet(VerbsCommon.Set, "AzureRmDnsZone", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.Medium), OutputType(typeof(DnsZone))]
     public class SetAzureDnsZone : DnsBaseCmdlet
     {
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The full name of the zone (without a terminating dot).", ParameterSetName = "Fields")]
@@ -31,12 +31,13 @@ namespace Microsoft.Azure.Commands.Dns
         public string Name { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group in which the zone exists.", ParameterSetName = "Fields")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
         [Alias("Tags")]
         [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true, HelpMessage = "A hash table which represents resource tags.", ParameterSetName = "Fields")]
-        public Hashtable[] Tag { get; set; }
+        public Hashtable Tag { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipeline = true, HelpMessage = "The zone object to set.", ParameterSetName = "Object")]
         [ValidateNotNullOrEmpty]
@@ -47,6 +48,8 @@ namespace Microsoft.Azure.Commands.Dns
 
         public override void ExecuteCmdlet()
         {
+            WriteWarning("The output object type of this cmdlet will be modified in a future release.");
+
             DnsZone result = null;
             DnsZone zoneToUpdate = null;
 
@@ -75,12 +78,17 @@ namespace Microsoft.Azure.Commands.Dns
                 zoneToUpdate.Name = zoneToUpdate.Name.TrimEnd('.');
                 this.WriteWarning(string.Format("Modifying zone name to remove terminating '.'.  Zone name used is \"{0}\".", zoneToUpdate.Name));
             }
+            ConfirmAction(
+                ProjectResources.Progress_Modifying,
+                zoneToUpdate.Name,
+                () =>
+                {
+                    bool overwrite = this.Overwrite.IsPresent || this.ParameterSetName != "Object";
+                    result = this.DnsClient.UpdateDnsZone(zoneToUpdate, overwrite);
 
-            bool overwrite = this.Overwrite.IsPresent || this.ParameterSetName != "Object";
-            result = this.DnsClient.UpdateDnsZone(zoneToUpdate, overwrite);
-
-            WriteVerbose(ProjectResources.Success);
-            WriteObject(result);
+                    WriteVerbose(ProjectResources.Success);
+                    WriteObject(result);
+                });
         }
     }
 }

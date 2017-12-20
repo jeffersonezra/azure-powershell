@@ -24,13 +24,14 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Xml;
+using Hyak.Common;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Microsoft.Azure.Common.Authentication.Models;
+using Microsoft.Azure.Commands.Common.Authentication.Models;
+using Microsoft.WindowsAzure.Commands.Common;
 using Microsoft.WindowsAzure.Commands.ServiceManagement.Extensions;
 using Microsoft.WindowsAzure.Commands.ServiceManagement.Model;
-using Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests.ConfigDataInfo;
-using Hyak.Common;
 using Microsoft.WindowsAzure.Commands.ServiceManagement.PlatformImageRepository.Model;
+using Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests.ConfigDataInfo;
 
 namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
 {
@@ -279,21 +280,13 @@ namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
                 vmPowershellCmdlets.UpdateAzureVM(vmName, serviceName, vm);
                 Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, testAVSetName));
 
-                vm = vmPowershellCmdlets.SetAzureAvailabilitySet(vmName, serviceName, string.Empty);
-                vmPowershellCmdlets.UpdateAzureVM(vmName, serviceName, vm);
-                Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, string.Empty));
-
-                vm = vmPowershellCmdlets.SetAzureAvailabilitySet(vmName, serviceName, testAVSetName);
-                vmPowershellCmdlets.UpdateAzureVM(vmName, serviceName, vm);
-                Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, testAVSetName));
-
                 vm = vmPowershellCmdlets.SetAzureAvailabilitySet(vmName, serviceName, null);
                 vmPowershellCmdlets.UpdateAzureVM(vmName, serviceName, vm);
                 Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, testAVSetName));
 
                 vm = vmPowershellCmdlets.RemoveAzureAvailabilitySet(vmName, serviceName);
                 vmPowershellCmdlets.UpdateAzureVM(vmName, serviceName, vm);
-                Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, testAVSetName));
+                Assert.IsTrue(Verify.AzureAvailabilitySet(vmPowershellCmdlets.GetAzureVM(vmName, serviceName).VM, null));
 
                 pass = true;
             }
@@ -678,10 +671,9 @@ namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
                 }
                 catch (Exception ex)
                 {
-                    Assert.IsNotNull(ex.InnerException);
-                    CloudException ce = (CloudException) ex.InnerException;
-                    Assert.IsTrue(ce.Response.StatusCode == System.Net.HttpStatusCode.BadRequest);
-                    Assert.IsTrue(ce.Message.Contains("The date specified in parameter EndTime is not within the correct range."));
+                    Func<Exception, string, bool> containMessage = (e, s) => e != null && e.Message != null && e.Message.Contains(s);
+                    string msgStr = "The date specified in parameter EndTime is not within the correct range.";
+                    Assert.IsTrue(containMessage(ex, msgStr) || (ex.InnerException != null && containMessage(ex.InnerException, msgStr)));
                 }
 
                 // Negative test for Get-AzureVM
@@ -1587,13 +1579,12 @@ namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
             string location = staticParameters[1];
             string affinity = staticParameters[2];
 
-            Console.WriteLine("Name: {0}, Label: {1}, Description: {2}, AffinityGroup: {3}, Location: {4}, GeoReplicationEnabled: {5}, AccountType: {6}",
+            Console.WriteLine("Name: {0}, Label: {1}, Description: {2}, AffinityGroup: {3}, Location: {4}, AccountType: {5}",
                 storageContext.StorageAccountName,
                 storageContext.Label,
                 storageContext.StorageAccountDescription,
                 storageContext.AffinityGroup,
                 storageContext.Location,
-                storageContext.GeoReplicationEnabled,
                 storageContext.AccountType);
 
             try
@@ -1603,7 +1594,6 @@ namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
                 Assert.AreEqual(description, storageContext.StorageAccountDescription, "Error: Storage Account Description is not equal!");
                 Assert.AreEqual(affinity, storageContext.AffinityGroup, "Error: Affinity Group is not equal!");
                 Assert.AreEqual(location, storageContext.Location, "Error: Location is not equal!");
-                Assert.AreEqual(geoReplicationEnabled, storageContext.GeoReplicationEnabled, "Error: GeoReplicationEnabled is not equal!");
                 Assert.AreEqual(accountType, storageContext.AccountType, "Error: AccountType is not equal!");
                 Console.WriteLine("All contexts are matched!!\n");
             }
@@ -1747,23 +1737,73 @@ namespace Microsoft.WindowsAzure.Commands.ServiceManagement.Test.FunctionalTests
         {
             StartTest(MethodBase.GetCurrentMethod().Name, testStartTime);
 
-            var imgName = Utilities.GetUniqueShortName("img");
-
-            try
-            {
-                var scripts = new string[]
+            Func<string, string[]> getScripts = img => new string[]
                 {
                     "Import-Module '.\\" + Utilities.AzurePowershellModuleServiceManagementPirModule + "';",
                     "$c1 = New-AzurePlatformComputeImageConfig -Offer test -Sku test -Version test;",
                     "$c2 = New-AzurePlatformMarketplaceImageConfig -PlanName test -Product test -Publisher test -PublisherId test;",
-                    "Set-AzurePlatformVMImage -ImageName " + imgName + " -ReplicaLocations 'West US' -ComputeImageConfig $c1 -MarketplaceImageConfig $c2;"
+                    "$vmImgLoc = (Get-AzureLocation | where { $_.Name -like '*US*' } | select -ExpandProperty Name)[0];",
+                    "Set-AzurePlatformVMImage -ImageName " + img + " -ReplicaLocations $vmImgLoc -ComputeImageConfig $c1 -MarketplaceImageConfig $c2;"
                 };
 
+            var imgName = Utilities.GetUniqueShortName("img");
+
+            try
+            {
+                var scripts = getScripts(imgName);
                 vmPowershellCmdlets.RunPSScript(string.Join(System.Environment.NewLine, scripts), true);
             }
             catch (Exception e)
             {
                 var expectedMsg = "ResourceNotFound: The image with the specified name does not exist.";
+                if (e.InnerException != null && e.InnerException.Message != null && e.InnerException.Message.Contains(expectedMsg))
+                {
+                    pass = true;
+                    Console.WriteLine(e.InnerException.ToString());
+                }
+                else
+                {
+                    pass = false;
+                    Assert.Fail("Exception occurred: {0}", e.ToString());
+                }
+            }
+
+            // OS Image
+            var osImages = vmPowershellCmdlets.GetAzureVMImage();
+            imgName = osImages.First().ImageName;
+
+            try
+            {
+                var scripts = getScripts(imgName);
+                vmPowershellCmdlets.RunPSScript(string.Join(System.Environment.NewLine, scripts), true);
+            }
+            catch (Exception e)
+            {
+                var expectedMsg = "ForbiddenError: This operation is not allowed for this subscription.";
+                if (e.InnerException != null && e.InnerException.Message != null && e.InnerException.Message.Contains(expectedMsg))
+                {
+                    pass = true;
+                    Console.WriteLine(e.InnerException.ToString());
+                }
+                else
+                {
+                    pass = false;
+                    Assert.Fail("Exception occurred: {0}", e.ToString());
+                }
+            }
+
+            // VM Image
+            var vmImages = vmPowershellCmdlets.GetAzureVMImageReturningVMImages();
+            imgName = vmImages.First().ImageName;
+
+            try
+            {
+                var scripts = getScripts(imgName);
+                vmPowershellCmdlets.RunPSScript(string.Join(System.Environment.NewLine, scripts), true);
+            }
+            catch (Exception e)
+            {
+                var expectedMsg = "ForbiddenError: This operation is not allowed for this subscription.";
                 if (e.InnerException != null && e.InnerException.Message != null && e.InnerException.Message.Contains(expectedMsg))
                 {
                     pass = true;

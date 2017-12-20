@@ -12,13 +12,12 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Automation.Common;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
+using Microsoft.Azure.Management.Automation.Models;
 using System.Collections;
-using System.Collections.Generic;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.Automation.Common;
-using Microsoft.Azure.Management.Automation.Models;
-using Microsoft.WindowsAzure.Commands.Utilities.Common;
 using AutomationAccount = Microsoft.Azure.Commands.Automation.Model.AutomationAccount;
 
 namespace Microsoft.Azure.Commands.Automation.Cmdlet
@@ -26,9 +25,9 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
     /// <summary>
     /// Creates azure automation accounts based on automation account name and location.
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureAutomationAccount")]
+    [Cmdlet(VerbsCommon.New, "AzureRmAutomationAccount")]
     [OutputType(typeof(AutomationAccount))]
-    public class NewAzureAutomationAccount : AzurePSCmdlet
+    public class NewAzureAutomationAccount : ResourceManager.Common.AzureRMCmdlet
     {
         /// <summary>
         /// The automation client.
@@ -42,7 +41,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         {
             get
             {
-                return this.automationClient = this.automationClient ?? new AutomationClient(Profile, Profile.Context.Subscription);
+                return this.automationClient = this.automationClient ?? new AutomationClient(DefaultProfile.DefaultContext);
             }
 
             set
@@ -55,6 +54,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// Gets or sets the automation account name.
         /// </summary>
         [Parameter(Position = 0, Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -70,12 +70,13 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// Gets or sets the location.
         /// </summary>
         [Parameter(Position = 2, Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The geo region of the automation account")]
+        [LocationCompleter("Microsoft.Automation/automationAccounts")]
         public string Location { get; set; }
 
         /// <summary>
         /// Gets or sets the plan.
         /// </summary>
-        [Parameter( Mandatory = false, ValueFromPipelineByPropertyName = true, HelpMessage = "The plan of the automation account")]
+        [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true, HelpMessage = "The plan of the automation account")]
         [ValidateSet(SkuNameEnum.Free, SkuNameEnum.Basic, IgnoreCase = true)]
         public string Plan { get; set; }
 

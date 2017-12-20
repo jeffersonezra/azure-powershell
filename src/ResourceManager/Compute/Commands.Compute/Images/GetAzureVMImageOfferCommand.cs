@@ -14,8 +14,7 @@
 
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.Azure.Management.Compute;
-using Microsoft.Azure.Management.Compute.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Linq;
 using System.Management.Automation;
 
@@ -25,7 +24,7 @@ namespace Microsoft.Azure.Commands.Compute
     [OutputType(typeof(PSVirtualMachineImageOffer))]
     public class GetAzureVMImageOfferCommand : VirtualMachineImageBaseCmdlet
     {
-        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty]
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty, LocationCompleter("Microsoft.Compute/locations/publishers")]
         public string Location { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty]
@@ -35,26 +34,25 @@ namespace Microsoft.Azure.Commands.Compute
         {
             base.ExecuteCmdlet();
 
-            var parameters = new VirtualMachineImageListOffersParameters
+            ExecuteClientAction(() =>
             {
-                Location = Location.Canonicalize(),
-                PublisherName = PublisherName
-            };
+                var result = this.VirtualMachineImageClient.ListOffersWithHttpMessagesAsync(
+                    this.Location.Canonicalize(),
+                    this.PublisherName).GetAwaiter().GetResult();
 
-            VirtualMachineImageResourceList result = this.VirtualMachineImageClient.ListOffers(parameters);
+                var images = from r in result.Body
+                             select new PSVirtualMachineImageOffer
+                             {
+                                 RequestId = result.RequestId,
+                                 StatusCode = result.Response.StatusCode,
+                                 Id = r.Id,
+                                 Location = r.Location,
+                                 Offer = r.Name,
+                                 PublisherName = this.PublisherName
+                             };
 
-            var images = from r in result.Resources
-                         select new PSVirtualMachineImageOffer
-                         {
-                             RequestId = result.RequestId,
-                             StatusCode = result.StatusCode,
-                             Id = r.Id,
-                             Location = r.Location,
-                             Offer = r.Name,
-                             PublisherName = this.PublisherName
-                         };
-
-            WriteObject(images, true);
+                WriteObject(images, true);
+            });
         }
     }
 }

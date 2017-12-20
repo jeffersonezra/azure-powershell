@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,21 +12,21 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
+using Microsoft.Azure.Commands.Sql.Database.Model;
+using Microsoft.Azure.Commands.Sql.ElasticPool.Model;
+using Microsoft.Rest.Azure;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using Hyak.Common;
-using Microsoft.Azure.Commands.Sql.Database.Model;
-using Microsoft.Azure.Commands.Sql.ElasticPool.Model;
-using Microsoft.Azure.Commands.Sql.Properties;
-using Microsoft.Azure.Commands.Sql.Server.Adapter;
 
 namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
 {
     /// <summary>
     /// Cmdlet to create a new Azure Sql ElasticPool
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureSqlElasticPool",
+    [Cmdlet(VerbsCommon.New, "AzureRmSqlElasticPool", SupportsShouldProcess = true,
         ConfirmImpact = ConfirmImpact.Low)]
     public class NewAzureSqlElasticPool : AzureSqlElasticPoolCmdletBase
     {
@@ -35,6 +35,7 @@ namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
         /// </summary>
         [Parameter(Mandatory = true,
             HelpMessage = "The name of the Azure SQL ElasticPool to create.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string ElasticPoolName { get; set; }
 
@@ -60,7 +61,7 @@ namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
         [Parameter(Mandatory = false,
             HelpMessage = "The storage limit for the Sql Azure Elastic Pool in MB.")]
         [ValidateNotNullOrEmpty]
-        public long StorageMB { get; set; }
+        public int StorageMB { get; set; }
 
         /// <summary>
         /// Gets or sets the minimum DTU all Sql Azure Databases are guaranteed.
@@ -83,7 +84,23 @@ namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
         /// </summary>
         [Parameter(Mandatory = false,
             HelpMessage = "The tags to associate with the Azure Sql Elastic Pool")]
-        public Dictionary<string, string> Tags { get; set; }
+        [Alias("Tag")]
+        public Hashtable Tags { get; set; }
+
+        /// <summary>
+        /// Gets or sets the zone redundant option to assign to the Azure SQL Elastic Pool
+        /// </summary>
+        [Parameter(Mandatory = false,
+            HelpMessage = "The zone redundancy to associate with the Azure Sql Elastic Pool")]
+        public SwitchParameter ZoneRedundant { get; set; }
+
+        /// <summary>
+        /// Overriding to add warning message
+        /// </summary>
+        public override void ExecuteCmdlet()
+        {
+            base.ExecuteCmdlet();
+        }
 
         /// <summary>
         /// Get the entities from the service
@@ -110,7 +127,7 @@ namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
 
             // The database already exists
             throw new PSArgumentException(
-                string.Format(Resources.ElasticPoolNameExists, this.ElasticPoolName, this.ServerName),
+                string.Format(Microsoft.Azure.Commands.Sql.Properties.Resources.ElasticPoolNameExists, this.ElasticPoolName, this.ServerName),
                 "ElasticPoolName");
         }
 
@@ -124,18 +141,19 @@ namespace Microsoft.Azure.Commands.Sql.ElasticPool.Cmdlet
             string location = ModelAdapter.GetServerLocation(ResourceGroupName, ServerName);
             List<AzureSqlElasticPoolModel> newEntity = new List<AzureSqlElasticPoolModel>();
             newEntity.Add(new AzureSqlElasticPoolModel()
-                {
-                    ResourceGroupName = ResourceGroupName,
-                    ServerName = ServerName,
-                    Tags = Tags,
-                    Location = location,
-                    ElasticPoolName = ElasticPoolName,
-                    DatabaseDtuMax = MyInvocation.BoundParameters.ContainsKey("DatabaseDtuMax") ? (int?)DatabaseDtuMax : null,
-                    DatabaseDtuMin = MyInvocation.BoundParameters.ContainsKey("DatabaseDtuMin") ? (int?)DatabaseDtuMin : null,
-                    Dtu = MyInvocation.BoundParameters.ContainsKey("Dtu") ? (int?)Dtu : null,
-                    Edition = MyInvocation.BoundParameters.ContainsKey("Edition") ? (DatabaseEdition?)Edition : null,
-                    StorageMB = MyInvocation.BoundParameters.ContainsKey("StorageMB") ? (long?)StorageMB : null,
-                });
+            {
+                ResourceGroupName = ResourceGroupName,
+                ServerName = ServerName,
+                Tags = TagsConversionHelper.CreateTagDictionary(Tags, validate: true),
+                Location = location,
+                ElasticPoolName = ElasticPoolName,
+                DatabaseDtuMax = MyInvocation.BoundParameters.ContainsKey("DatabaseDtuMax") ? (int?)DatabaseDtuMax : null,
+                DatabaseDtuMin = MyInvocation.BoundParameters.ContainsKey("DatabaseDtuMin") ? (int?)DatabaseDtuMin : null,
+                Dtu = MyInvocation.BoundParameters.ContainsKey("Dtu") ? (int?)Dtu : null,
+                Edition = MyInvocation.BoundParameters.ContainsKey("Edition") ? (DatabaseEdition?)Edition : null,
+                StorageMB = MyInvocation.BoundParameters.ContainsKey("StorageMB") ? (int?)StorageMB : null,
+                ZoneRedundant = MyInvocation.BoundParameters.ContainsKey("ZoneRedundant") ? (bool?)ZoneRedundant.ToBool() : null,
+            });
             return newEntity;
         }
 

@@ -12,64 +12,83 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Network.Models;
+using Microsoft.Azure.Management.Network;
 using System.Collections.Generic;
 using System.Management.Automation;
-using Microsoft.Azure.Management.Network;
-using Microsoft.Azure.Commands.Network.Models;
-using MNM = Microsoft.Azure.Management.Network.Models;
+using Microsoft.Azure.Management.Network.Models;
+using Microsoft.Rest.Azure;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 
 namespace Microsoft.Azure.Commands.Network
 {
-    [Cmdlet(VerbsCommon.Get, "AzureLoadBalancer"), OutputType(typeof(PSLoadBalancer))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmLoadBalancer"), OutputType(typeof(PSLoadBalancer))]
     public class GetAzureLoadBalancerCommand : LoadBalancerBaseCmdlet
     {
         [Alias("ResourceName")]
         [Parameter(
             Mandatory = false,
             ValueFromPipelineByPropertyName = true,
-            HelpMessage = "The resource name.")]
+            HelpMessage = "The resource name.",
+            ParameterSetName = "NoExpand")]
+        [Parameter(
+           Mandatory = true,
+           ValueFromPipelineByPropertyName = true,
+           HelpMessage = "The resource name.",
+           ParameterSetName = "Expand")]
         [ValidateNotNullOrEmpty]
         public virtual string Name { get; set; }
 
         [Parameter(
             Mandatory = false,
             ValueFromPipelineByPropertyName = true,
-            HelpMessage = "The resource group name.")]
+            HelpMessage = "The resource group name.",
+            ParameterSetName = "NoExpand")]
+        [Parameter(
+           Mandatory = true,
+           ValueFromPipelineByPropertyName = true,
+           HelpMessage = "The resource group name.",
+           ParameterSetName = "Expand")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public virtual string ResourceGroupName { get; set; }
 
-        public override void ExecuteCmdlet()
+        [Parameter(
+            Mandatory = true,
+            ValueFromPipelineByPropertyName = true,
+            HelpMessage = "The resource reference to be expanded.",
+            ParameterSetName = "Expand")]
+        [ValidateNotNullOrEmpty]
+        public string ExpandResource { get; set; }
+
+        public override void Execute()
         {
-            base.ExecuteCmdlet();
+            base.Execute();
             if (!string.IsNullOrEmpty(this.Name))
             {
-                var loadBalancer = this.GetLoadBalancer(this.ResourceGroupName, this.Name);
-                
+                var loadBalancer = this.GetLoadBalancer(this.ResourceGroupName, this.Name, this.ExpandResource);
+
                 WriteObject(loadBalancer);
             }
-            else if (!string.IsNullOrEmpty(this.ResourceGroupName))
-            {
-                var getLbResponse = this.LoadBalancerClient.List(this.ResourceGroupName);
-
-                var psLoadBalancers = new List<PSLoadBalancer>();
-
-                foreach (var lb in getLbResponse.LoadBalancers)
-                {
-                    var psLb = this.ToPsLoadBalancer(lb);
-                    psLb.ResourceGroupName = this.ResourceGroupName;
-                    psLoadBalancers.Add(psLb);
-                }
-
-                WriteObject(psLoadBalancers, true);
-            }
-
             else
             {
-                var getLbResponse = this.LoadBalancerClient.ListAll();
+                IPage<LoadBalancer> lbPage;
+                if (!string.IsNullOrEmpty(this.ResourceGroupName))
+                {
+                    lbPage = this.LoadBalancerClient.List(this.ResourceGroupName);
+                }
+
+                else
+                {
+                    lbPage = this.LoadBalancerClient.ListAll();
+                }
+
+                // Get all resources by polling on next page link
+                var lbList = ListNextLink<LoadBalancer>.GetAllResourcesByPollingNextLink(lbPage, this.LoadBalancerClient.ListNext);
 
                 var psLoadBalancers = new List<PSLoadBalancer>();
 
-                foreach (var lb in getLbResponse.LoadBalancers)
+                foreach (var lb in lbList)
                 {
                     var psLb = this.ToPsLoadBalancer(lb);
                     psLb.ResourceGroupName = NetworkBaseCmdlet.GetResourceGroup(lb.Id);
@@ -82,4 +101,3 @@ namespace Microsoft.Azure.Commands.Network
     }
 }
 
- 

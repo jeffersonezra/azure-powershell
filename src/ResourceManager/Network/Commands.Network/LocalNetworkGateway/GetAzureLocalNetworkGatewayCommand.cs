@@ -12,15 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Network.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
+using Microsoft.Azure.Management.Network;
+using Microsoft.Azure.Management.Network.Models;
 using System.Collections.Generic;
 using System.Management.Automation;
-using Microsoft.Azure.Management.Network;
-using Microsoft.Azure.Commands.Network.Models;
-using MNM = Microsoft.Azure.Management.Network.Models;
 
 namespace Microsoft.Azure.Commands.Network
 {
-    [Cmdlet(VerbsCommon.Get, "AzureLocalNetworkGateway"), OutputType(typeof(PSLocalNetworkGateway))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmLocalNetworkGateway"), OutputType(typeof(PSLocalNetworkGateway))]
     public class GetAzureLocalNetworkGatewayCommand : LocalNetworkGatewayBaseCmdlet
     {
         [Alias("ResourceName")]
@@ -35,12 +36,13 @@ namespace Microsoft.Azure.Commands.Network
             Mandatory = true,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public virtual string ResourceGroupName { get; set; }
 
-        public override void ExecuteCmdlet()
+        public override void Execute()
         {
-            base.ExecuteCmdlet();
+            base.Execute();
             if (!string.IsNullOrEmpty(this.Name))
             {
                 var localnetGateway = this.GetLocalNetworkGateway(this.ResourceGroupName, this.Name);
@@ -49,10 +51,13 @@ namespace Microsoft.Azure.Commands.Network
             }
             else if (!string.IsNullOrEmpty(this.ResourceGroupName))
             {
-                var localnetGatewayGetResponse = this.LocalNetworkGatewayClient.List(this.ResourceGroupName);
+                var localnetGatewayPage = this.LocalNetworkGatewayClient.List(this.ResourceGroupName);
+
+                // Get all resources by polling on next page link
+                var localnetGatewayList = ListNextLink<LocalNetworkGateway>.GetAllResourcesByPollingNextLink(localnetGatewayPage, this.LocalNetworkGatewayClient.ListNext);
 
                 var psLocalnetGateways = new List<PSLocalNetworkGateway>();
-                foreach (var localNetworkGateway in localnetGatewayGetResponse.LocalNetworkGateways)
+                foreach (var localNetworkGateway in localnetGatewayList)
                 {
                     var psLocalnetGateway = this.ToPsLocalNetworkGateway(localNetworkGateway);
                     psLocalnetGateway.ResourceGroupName = this.ResourceGroupName;
@@ -65,4 +70,3 @@ namespace Microsoft.Azure.Commands.Network
     }
 }
 
- 

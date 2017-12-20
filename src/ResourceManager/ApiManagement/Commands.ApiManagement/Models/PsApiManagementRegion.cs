@@ -14,10 +14,10 @@
 
 namespace Microsoft.Azure.Commands.ApiManagement.Models
 {
-    using System;
-    using System.Linq;
     using AutoMapper;
     using Microsoft.Azure.Management.ApiManagement.Models;
+    using System;
+    using System.Linq;
 
     public class PsApiManagementRegion
     {
@@ -34,7 +34,7 @@ namespace Microsoft.Azure.Commands.ApiManagement.Models
             }
 
             Location = regionResource.Location;
-            Sku = Mapper.Map<SkuType, PsApiManagementSku>(regionResource.SkuType);
+            Sku = ApiManagementClient.Mapper.Map<SkuType, PsApiManagementSku>(regionResource.SkuType);
             Capacity = regionResource.SkuUnitCount ?? 1;
             StaticIPs = regionResource.StaticIPs.ToArray();
 

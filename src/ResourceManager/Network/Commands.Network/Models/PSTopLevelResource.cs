@@ -12,8 +12,8 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Management.Internal.Resources.Utilities;
 using System.Collections;
-using Microsoft.Azure.Commands.Resources.Models;
 
 namespace Microsoft.Azure.Commands.Network.Models
 {
@@ -23,7 +23,11 @@ namespace Microsoft.Azure.Commands.Network.Models
 
         public string Location { get; set; }
 
-        public Hashtable[] Tag { get; set; }
+        public string ResourceGuid { get; set; }
+
+        public string Type { get; set; }
+
+        public Hashtable Tag { get; set; }
 
         public string TagsTable
         {

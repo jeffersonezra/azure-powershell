@@ -14,10 +14,11 @@
 
 namespace Microsoft.Azure.Commands.ApiManagement.Commands
 {
-    using System.Management.Automation;
     using Microsoft.Azure.Commands.ApiManagement.Models;
+    using ResourceManager.Common.ArgumentCompleters;
+    using System.Management.Automation;
 
-    [Cmdlet(VerbsCommon.Remove, "AzureApiManagementRegion"), OutputType(typeof (PsApiManagement))]
+    [Cmdlet(VerbsCommon.Remove, "AzureRmApiManagementRegion"), OutputType(typeof(PsApiManagement))]
     public class RemoveAzureApiManagementRegion : AzureApiManagementCmdletBase
     {
         [Parameter(
@@ -31,11 +32,8 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
             ValueFromPipelineByPropertyName = true,
             Mandatory = true,
             HelpMessage = "Location of the deployment region to remove.")]
+        [LocationCompleter("Microsoft.ApiManagement/service")]
         [ValidateNotNullOrEmpty]
-        [ValidateSet(
-            "North Central US", "South Central US", "Central US", "West Europe", "North Europe", "West US", "East US",
-            "East US 2", "Japan East", "Japan West", "Brazil South", "Southeast Asia", "East Asia", "Australia East",
-            "Australia Southeast", IgnoreCase = false)]
         public string Location { get; set; }
 
         public override void ExecuteCmdlet()

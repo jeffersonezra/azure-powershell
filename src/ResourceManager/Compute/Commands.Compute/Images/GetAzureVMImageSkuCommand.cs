@@ -14,8 +14,7 @@
 
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.Azure.Management.Compute;
-using Microsoft.Azure.Management.Compute.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Linq;
 using System.Management.Automation;
 
@@ -25,7 +24,7 @@ namespace Microsoft.Azure.Commands.Compute
     [OutputType(typeof(PSVirtualMachineImageSku))]
     public class GetAzureVMImageSkuCommand : VirtualMachineImageBaseCmdlet
     {
-        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty]
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty, LocationCompleter("Microsoft.Compute/locations/publishers")]
         public string Location { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true), ValidateNotNullOrEmpty]
@@ -38,28 +37,27 @@ namespace Microsoft.Azure.Commands.Compute
         {
             base.ExecuteCmdlet();
 
-            var parameters = new VirtualMachineImageListSkusParameters
+            ExecuteClientAction(() =>
             {
-                Location = Location.Canonicalize(),
-                PublisherName = PublisherName,
-                Offer = Offer
-            };
+                var result = this.VirtualMachineImageClient.ListSkusWithHttpMessagesAsync(
+                    this.Location.Canonicalize(),
+                    this.PublisherName,
+                    this.Offer).GetAwaiter().GetResult();
 
-            VirtualMachineImageResourceList result = this.VirtualMachineImageClient.ListSkus(parameters);
+                var images = from r in result.Body
+                             select new PSVirtualMachineImageSku
+                             {
+                                 RequestId = result.RequestId,
+                                 StatusCode = result.Response.StatusCode,
+                                 Id = r.Id,
+                                 Location = r.Location,
+                                 PublisherName = this.PublisherName,
+                                 Offer = this.Offer,
+                                 Skus = r.Name
+                             };
 
-            var images = from r in result.Resources
-                         select new PSVirtualMachineImageSku
-                         {
-                             RequestId = result.RequestId,
-                             StatusCode = result.StatusCode,
-                             Id = r.Id,
-                             Location = r.Location,
-                             PublisherName = this.PublisherName,
-                             Offer = this.Offer,
-                             Skus = r.Name
-                         };
-
-            WriteObject(images, true);
+                WriteObject(images, true);
+            });
         }
     }
 }

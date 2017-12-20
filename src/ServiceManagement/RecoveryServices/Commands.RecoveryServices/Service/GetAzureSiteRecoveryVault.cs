@@ -25,6 +25,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryVault", DefaultParameterSetName = ASRParameterSets.Default)]
     [OutputType(typeof(List<ASRVault>))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class GetAzureSiteRecoveryVaults : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -43,6 +46,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 switch (this.ParameterSetName)
                 {
                     case ASRParameterSets.ByName:

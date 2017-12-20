@@ -15,8 +15,9 @@
 using AutoMapper;
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.Azure.Management.Compute;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using Microsoft.Azure.Management.Compute.Models;
+using System;
 using System.Management.Automation;
 
 namespace Microsoft.Azure.Commands.Compute
@@ -30,6 +31,7 @@ namespace Microsoft.Azure.Commands.Compute
            Position = 0,
            ValueFromPipelineByPropertyName = true,
            HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -47,41 +49,77 @@ namespace Microsoft.Azure.Commands.Compute
             Position = 2,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "The location.")]
+        [LocationCompleter("Microsoft.Compute/availabilitySets")]
         [ValidateNotNullOrEmpty]
         public string Location { get; set; }
 
         [Parameter(
             Position = 3,
             ValueFromPipelineByPropertyName = true,
-            HelpMessage = "The Platform Update Domain Count.")]
+            HelpMessage = "The Platform Update Domain Count")]
         [ValidateNotNullOrEmpty]
         public int? PlatformUpdateDomainCount { get; set; }
 
         [Parameter(
             Position = 4,
             ValueFromPipelineByPropertyName = true,
-            HelpMessage = "The Platform Fault Domain Count.")]
+            HelpMessage = "The Platform Fault Domain Count")]
         [ValidateNotNullOrEmpty]
         public int? PlatformFaultDomainCount { get; set; }
+
+        [Parameter(
+            Position = 5,
+            ValueFromPipelineByPropertyName = true,
+            HelpMessage = "The Name of Sku")]
+        public string Sku { get; set; }
+
+        [Parameter(
+            ValueFromPipelineByPropertyName = true,
+            HelpMessage = "Managed Availability Set")]
+        [Obsolete("This parameter is obsolete.  Please use Sku parameter instead.", false)]
+        public SwitchParameter Managed { get; set; }
+
+        [Parameter(Mandatory = false, HelpMessage = "Run cmdlet in the background")]
+        public SwitchParameter AsJob { get; set; }
 
         public override void ExecuteCmdlet()
         {
             base.ExecuteCmdlet();
 
-            var avSetParams = new AvailabilitySet
+            ExecuteClientAction(() =>
             {
-                Name = this.Name,
-                Location = this.Location,
-                PlatformUpdateDomainCount = this.PlatformUpdateDomainCount,
-                PlatformFaultDomainCount = this.PlatformFaultDomainCount
-            };
+                var avSetParams = new AvailabilitySet
+                {
+                    Location = this.Location,
+                    PlatformUpdateDomainCount = this.PlatformUpdateDomainCount,
+                    PlatformFaultDomainCount = this.PlatformFaultDomainCount
+                };
 
-            var result = this.AvailabilitySetClient.CreateOrUpdate(
-                this.ResourceGroupName,
-                avSetParams);
+                if (this.Managed.IsPresent || !string.IsNullOrEmpty(this.Sku))
+                {
+                    avSetParams.Sku = new Sku();
+                    if (!string.IsNullOrEmpty(this.Sku))
+                    {
+                        avSetParams.Sku.Name = this.Sku;
+                    }
+                    if (this.Managed.IsPresent)
+                    {
+                        avSetParams.Sku.Name = "Aligned";
+                    }
+                }
 
-            var psResult = Mapper.Map<PSAvailabilitySet>(result.AvailabilitySet);
-            WriteObject(psResult);
+                var result = this.AvailabilitySetClient.CreateOrUpdateWithHttpMessagesAsync(
+                    this.ResourceGroupName,
+                    this.Name,
+                    avSetParams).GetAwaiter().GetResult();
+
+                var psResult = ComputeAutoMapperProfile.Mapper.Map<PSAvailabilitySet>(result);
+                if (result.Body != null)
+                {
+                    psResult = ComputeAutoMapperProfile.Mapper.Map(result.Body, psResult);
+                }
+                WriteObject(psResult);
+            });
         }
     }
 }

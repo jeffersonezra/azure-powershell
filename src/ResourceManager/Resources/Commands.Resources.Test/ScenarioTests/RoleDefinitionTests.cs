@@ -13,31 +13,79 @@
 // ----------------------------------------------------------------------------------
 
 
+using Microsoft.Azure.ServiceManagemenet.Common.Models;
 using Microsoft.WindowsAzure.Commands.ScenarioTest;
+using Microsoft.WindowsAzure.Commands.Test.Utilities.Common;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Azure.Commands.Resources.Test.ScenarioTests
 {
-    public class RoleDefinitionTests
+    public class RoleDefinitionTests : RMTestBase
     {
-        // TODO: Add  [Trait(Category.AcceptanceType, Category.CheckIn)] attribute for each test once it gets implemented fully
+        public RoleDefinitionTests(ITestOutputHelper output)
+        {
+            XunitTracingInterceptor.AddToContext(new XunitTracingInterceptor(output));
+        }
 
-        [Fact(Skip = "Not implemented")]
+        [Fact]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
         public void RoleDefinitionCreateTests()
         {
             ResourcesController.NewInstance.RunPsTest("Test-RoleDefinitionCreateTests");
         }
 
-        [Fact(Skip="Not implemented")]
+        [Fact]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
         public void RdNegativeScenarios()
         {
             ResourcesController.NewInstance.RunPsTest("Test-RdNegativeScenarios");
         }
 
-        [Fact(Skip = "Not implemented")]
+        [Fact]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
         public void RdPositiveScenarios()
         {
             ResourcesController.NewInstance.RunPsTest("Test-RDPositiveScenarios");
+        }
+
+		[Fact]
+		[Trait(Category.AcceptanceType, Category.CheckIn)]
+		public void RDUpdate()
+		{
+			ResourcesController.NewInstance.RunPsTest("Test-RDUpdate");
+		}
+
+		[Fact]
+		[Trait(Category.AcceptanceType, Category.CheckIn)]
+		public void RDCreateFromFile()
+		{
+			ResourcesController.NewInstance.RunPsTest("Test-RDCreateFromFile");
+		}
+
+		[Fact(Skip = "Unskip after service side change")]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
+        public void RDRemoveScenario()
+        {
+            ResourcesController.NewInstance.RunPsTest("Test-RDRemove");
+        }
+
+        [Fact(Skip = "Unskip after service side change")]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
+        public void RDGetScenario()
+        {
+            ResourcesController.NewInstance.RunPsTest("Test-RDGet");
+        }
+
+        [Fact]
+        [Trait(Category.AcceptanceType, Category.CheckIn)]
+        public void RdValidateInputParameters() 
+        {
+            var instance = ResourcesController.NewInstance;
+            instance.RunPsTest("Test-RdValidateInputParameters Get-AzureRmRoleDefinition");
+            instance.RunPsTest("Test-RdValidateInputParameters Remove-AzureRmRoleDefinition");
+            instance.RunPsTest("Test-RdValidateInputParameters2 New-AzureRmRoleDefinition");
+            instance.RunPsTest("Test-RdValidateInputParameters2 Set-AzureRmRoleDefinition");
         }
     }
 }

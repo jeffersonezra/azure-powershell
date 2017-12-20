@@ -13,24 +13,21 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Net;
 using AutoMapper;
 using Microsoft.Azure.Commands.Network.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
 using Microsoft.Azure.Management.Network;
-using Microsoft.Azure.Management.Network.Models;
-using Microsoft.Azure.Commands.Resources.Models;
-using Hyak.Common;
-using Microsoft.Azure.Commands.Tags.Model;
+using System.Net;
 
 namespace Microsoft.Azure.Commands.Network
 {
     public abstract class VirtualNetworkGatewayBaseCmdlet : NetworkBaseCmdlet
     {
-        public IVirtualNetworkGatewayOperations VirtualNetworkGatewayClient
+        public IVirtualNetworkGatewaysOperations VirtualNetworkGatewayClient
         {
             get
             {
-                return NetworkClient.NetworkResourceProviderClient.VirtualNetworkGateways;
+                return NetworkClient.NetworkManagementClient.VirtualNetworkGateways;
             }
         }
 
@@ -40,7 +37,7 @@ namespace Microsoft.Azure.Commands.Network
             {
                 GetVirtualNetworkGateway(resourceGroupName, name);
             }
-            catch (CloudException exception)
+            catch (Microsoft.Rest.Azure.CloudException exception)
             {
                 if (exception.Response.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -55,17 +52,17 @@ namespace Microsoft.Azure.Commands.Network
 
         public PSVirtualNetworkGateway GetVirtualNetworkGateway(string resourceGroupName, string name)
         {
-            var getVirtualNetworkGatewayResponse = this.VirtualNetworkGatewayClient.Get(resourceGroupName, name);
+            var vnetGateway = this.VirtualNetworkGatewayClient.Get(resourceGroupName, name);
 
-            var psVirtualNetworkGateway = ToPsVirtualNetworkGateway(getVirtualNetworkGatewayResponse.VirtualNetworkGateway);
+            var psVirtualNetworkGateway = ToPsVirtualNetworkGateway(vnetGateway);
             psVirtualNetworkGateway.ResourceGroupName = resourceGroupName;
 
             return psVirtualNetworkGateway;
         }
 
-        public PSVirtualNetworkGateway ToPsVirtualNetworkGateway(VirtualNetworkGateway vnetGateway)
+        public PSVirtualNetworkGateway ToPsVirtualNetworkGateway(Management.Network.Models.VirtualNetworkGateway vnetGateway)
         {
-            var psVirtualNetworkGateway = Mapper.Map<PSVirtualNetworkGateway>(vnetGateway);
+            var psVirtualNetworkGateway = NetworkResourceManagerProfile.Mapper.Map<PSVirtualNetworkGateway>(vnetGateway);
 
             psVirtualNetworkGateway.Tag = TagsConversionHelper.CreateTagHashtable(vnetGateway.Tags);
 

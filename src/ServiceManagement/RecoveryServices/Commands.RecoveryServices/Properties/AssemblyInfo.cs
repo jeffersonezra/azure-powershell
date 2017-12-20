@@ -30,6 +30,6 @@ using System.Runtime.InteropServices;
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 
-[assembly: AssemblyVersion("0.8.3")]
-[assembly: AssemblyFileVersion("0.8.3")]
+[assembly: AssemblyVersion("5.1.1")]
+[assembly: AssemblyFileVersion("5.1.1")]
 [assembly: CLSCompliant(false)]

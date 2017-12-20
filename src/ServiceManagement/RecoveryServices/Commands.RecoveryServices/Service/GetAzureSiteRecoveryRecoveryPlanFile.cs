@@ -24,6 +24,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// This command will download the xml file for the recovery plan.
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryRecoveryPlanFile", DefaultParameterSetName = ASRParameterSets.ByRPObject)]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class GetAzureSiteRecoveryRecoveryPlanFile : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -56,6 +59,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 switch (this.ParameterSetName)
                 {
                     case ASRParameterSets.ByRPObject:

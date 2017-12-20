@@ -12,15 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Network.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
+using Microsoft.Azure.Management.Network;
+using Microsoft.Azure.Management.Network.Models;
 using System.Collections.Generic;
 using System.Management.Automation;
-using Microsoft.Azure.Management.Network;
-using Microsoft.Azure.Commands.Network.Models;
-using MNM = Microsoft.Azure.Management.Network.Models;
 
 namespace Microsoft.Azure.Commands.Network
 {
-    [Cmdlet(VerbsCommon.Get, "AzureVirtualNetworkGateway"), OutputType(typeof(PSVirtualNetworkGateway))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmVirtualNetworkGateway"), OutputType(typeof(PSVirtualNetworkGateway))]
     public class GetAzureVirtualNetworkGatewayCommand : VirtualNetworkGatewayBaseCmdlet
     {
         [Alias("ResourceName")]
@@ -35,12 +36,13 @@ namespace Microsoft.Azure.Commands.Network
             Mandatory = true,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public virtual string ResourceGroupName { get; set; }
 
-        public override void ExecuteCmdlet()
+        public override void Execute()
         {
-            base.ExecuteCmdlet();
+            base.Execute();
             if (!string.IsNullOrEmpty(this.Name))
             {
                 var vnetGateway = this.GetVirtualNetworkGateway(this.ResourceGroupName, this.Name);
@@ -49,10 +51,13 @@ namespace Microsoft.Azure.Commands.Network
             }
             else if (!string.IsNullOrEmpty(this.ResourceGroupName))
             {
-                var vnetGatewayGetResponse = this.VirtualNetworkGatewayClient.List(this.ResourceGroupName);
+                var vnetGatewayPage = this.VirtualNetworkGatewayClient.List(this.ResourceGroupName);
+
+                // Get all resources by polling on next page link
+                var vnetGatewayList = ListNextLink<Management.Network.Models.VirtualNetworkGateway>.GetAllResourcesByPollingNextLink(vnetGatewayPage, this.VirtualNetworkGatewayClient.ListNext);
 
                 var psVnetGateways = new List<PSVirtualNetworkGateway>();
-                foreach (var virtualNetworkGateway in vnetGatewayGetResponse.VirtualNetworkGateways)
+                foreach (var virtualNetworkGateway in vnetGatewayList)
                 {
                     var psVnetGateway = this.ToPsVirtualNetworkGateway(virtualNetworkGateway);
                     psVnetGateway.ResourceGroupName = this.ResourceGroupName;
@@ -60,9 +65,8 @@ namespace Microsoft.Azure.Commands.Network
                 }
 
                 WriteObject(psVnetGateways, true);
-            }            
+            }
         }
     }
 }
 
- 

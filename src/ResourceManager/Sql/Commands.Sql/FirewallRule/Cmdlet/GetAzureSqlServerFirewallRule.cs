@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Sql.FirewallRule.Model;
 using System.Collections.Generic;
 using System.Management.Automation;
-using Microsoft.Azure.Commands.Sql.FirewallRule.Model;
 
 namespace Microsoft.Azure.Commands.Sql.FirewallRule.Cmdlet
 {
     /// <summary>
-    /// Defines the Get-AzureSqlServerFirewallRule cmdlet
+    /// Defines the Get-AzureRmSqlServerFirewallRule cmdlet
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureSqlServerFirewallRule", ConfirmImpact = ConfirmImpact.None)]
+    [Cmdlet(VerbsCommon.Get, "AzureRmSqlServerFirewallRule", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.None)]
     public class GetAzureSqlServerFirewallRule : AzureSqlServerFirewallRuleCmdletBase
     {
         /// <summary>
@@ -31,6 +31,7 @@ namespace Microsoft.Azure.Commands.Sql.FirewallRule.Cmdlet
             ValueFromPipelineByPropertyName = true,
             Position = 2,
             HelpMessage = "The Azure Sql Database Server Firewall Rule name.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string FirewallRuleName { get; set; }
 

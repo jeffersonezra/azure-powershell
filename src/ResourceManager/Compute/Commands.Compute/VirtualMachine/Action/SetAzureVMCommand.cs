@@ -12,30 +12,56 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using AutoMapper;
 using Microsoft.Azure.Commands.Compute.Common;
-using Microsoft.Azure.Management.Compute;
+using Microsoft.Azure.Commands.Compute.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Management.Automation;
 
 namespace Microsoft.Azure.Commands.Compute
 {
-    [Cmdlet(VerbsCommon.Set, ProfileNouns.VirtualMachine, DefaultParameterSetName = GeneralizeVirtualMachineParamSet)]
-    [OutputType(typeof(AzureOperationResponse))]
+    [Cmdlet(VerbsCommon.Set, ProfileNouns.VirtualMachine, DefaultParameterSetName = GeneralizeResourceGroupNameParameterSet)]
+    [OutputType(typeof(PSComputeLongRunningOperation))]
     public class SetAzureVMCommand : VirtualMachineBaseCmdlet
     {
-        protected const string GeneralizeVirtualMachineParamSet = "GeneralizeVirtualMachineParamSet";
+        protected const string GeneralizeResourceGroupNameParameterSet = "GeneralizeResourceGroupNameParameterSetName";
+        protected const string RedeployResourceGroupNameParameterSet = "RedeployResourceGroupNameParameterSetName";
+        protected const string GeneralizeIdParameterSet = "GeneralizeIdParameterSetName";
+        protected const string RedeployIdParameterSet = "RedeployIdParameterSetName";
 
         [Parameter(
            Mandatory = true,
-           ParameterSetName = GeneralizeVirtualMachineParamSet,
            Position = 0,
+           ParameterSetName = GeneralizeResourceGroupNameParameterSet,
            ValueFromPipelineByPropertyName = true,
-           HelpMessage = "The resource group name.")]
+         HelpMessage = "The resource group name.")]
+        [Parameter(
+           Mandatory = true,
+           Position = 0,
+           ParameterSetName = RedeployResourceGroupNameParameterSet,
+           ValueFromPipelineByPropertyName = true,
+          HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
         [Parameter(
            Mandatory = true,
-           ParameterSetName = GeneralizeVirtualMachineParamSet,
+           Position = 0,
+           ParameterSetName = GeneralizeIdParameterSet,
+           ValueFromPipelineByPropertyName = true,
+           HelpMessage = "The resource group name.")]
+        [Parameter(
+           Mandatory = true,
+           Position = 0,
+           ParameterSetName = RedeployIdParameterSet,
+           ValueFromPipelineByPropertyName = true,
+          HelpMessage = "The resource group name.")]
+        [ValidateNotNullOrEmpty]
+        public string Id { get; set; }
+
+        [Parameter(
+           Mandatory = true,
            Position = 1,
            ValueFromPipelineByPropertyName = true,
            HelpMessage = "The virtual machine name.")]
@@ -44,19 +70,55 @@ namespace Microsoft.Azure.Commands.Compute
 
         [Parameter(
             Mandatory = true,
-            ParameterSetName = GeneralizeVirtualMachineParamSet,
-            Position = 2,
-            ValueFromPipelineByPropertyName = true,
+            ParameterSetName = GeneralizeResourceGroupNameParameterSet,
+            HelpMessage = "To generalize virtual machine.")]
+        [Parameter(
+            Mandatory = true,
+            ParameterSetName = GeneralizeIdParameterSet,
             HelpMessage = "To generalize virtual machine.")]
         [ValidateNotNullOrEmpty]
         public SwitchParameter Generalized { get; set; }
+
+        [Parameter(
+            Mandatory = true,
+            ParameterSetName = RedeployResourceGroupNameParameterSet,
+            HelpMessage = "To redeploy virtual machine.")]
+        [Parameter(
+            Mandatory = true,
+            ParameterSetName = RedeployIdParameterSet,
+            HelpMessage = "To redeploy virtual machine.")]
+        [ValidateNotNullOrEmpty]
+        public SwitchParameter Redeploy { get; set; }
+
+        [Parameter(Mandatory = false, HelpMessage = "Run cmdlet in the background")]
+        public SwitchParameter AsJob { get; set; }
 
         public override void ExecuteCmdlet()
         {
             base.ExecuteCmdlet();
 
-            var op = this.VirtualMachineClient.Generalize(this.ResourceGroupName, this.Name);
-            WriteObject(op);
+            if (this.Generalized.IsPresent)
+            {
+                ExecuteClientAction(() =>
+                {
+                    var op = this.VirtualMachineClient.GeneralizeWithHttpMessagesAsync(
+                        this.ResourceGroupName,
+                        this.Name).GetAwaiter().GetResult();
+                    var result = ComputeAutoMapperProfile.Mapper.Map<PSComputeLongRunningOperation>(op);
+                    WriteObject(result);
+                });
+            }
+            else if (this.Redeploy.IsPresent)
+            {
+                ExecuteClientAction(() =>
+                {
+                    var op = this.VirtualMachineClient.RedeployWithHttpMessagesAsync(
+                        this.ResourceGroupName,
+                        this.Name).GetAwaiter().GetResult();
+                    var result = ComputeAutoMapperProfile.Mapper.Map<PSComputeLongRunningOperation>(op);
+                    WriteObject(result);
+                });
+            }
         }
     }
 }

@@ -12,8 +12,7 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using Microsoft.Azure.Commands.ActiveDirectory.Models;
-using Microsoft.Azure.Commands.Resources.Models.ActiveDirectory;
+using Microsoft.Azure.Graph.RBAC.Version1_6.ActiveDirectory;
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
@@ -23,7 +22,7 @@ namespace Microsoft.Azure.Commands.ActiveDirectory
     /// <summary>
     /// Get AD users.
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureADServicePrincipal", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADServicePrincipal>))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmADServicePrincipal", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADServicePrincipal>))]
     public class GetAzureADServicePrincipalCommand : ActiveDirectoryBaseCmdlet
     {
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = ParameterSet.SearchString,
@@ -46,19 +45,22 @@ namespace Microsoft.Azure.Commands.ActiveDirectory
 
         public override void ExecuteCmdlet()
         {
-            ADObjectFilterOptions options = new ADObjectFilterOptions
+            ExecutionBlock(() =>
             {
-                SearchString = SearchString,
-                SPN = ServicePrincipalName,
-                Id = ObjectId == Guid.Empty ? null : ObjectId.ToString(),
-                Paging = true
-            };
+                ADObjectFilterOptions options = new ADObjectFilterOptions
+                {
+                    SearchString = SearchString,
+                    SPN = ServicePrincipalName,
+                    Id = ObjectId == Guid.Empty ? null : ObjectId.ToString(),
+                    Paging = true
+                };
 
-            do
-            {
-                WriteObject(ActiveDirectoryClient.FilterServicePrincipals(options), true);
+                do
+                {
+                    WriteObject(ActiveDirectoryClient.FilterServicePrincipals(options), true);
 
-            } while (!string.IsNullOrEmpty(options.NextLink));
+                } while (!string.IsNullOrEmpty(options.NextLink));
+            });
         }
     }
 }

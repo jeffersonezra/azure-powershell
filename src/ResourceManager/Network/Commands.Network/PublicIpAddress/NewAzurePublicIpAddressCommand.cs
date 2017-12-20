@@ -1,4 +1,4 @@
-﻿
+
 
 // ----------------------------------------------------------------------------------
 //
@@ -14,18 +14,20 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections;
-using System.Management.Automation;
 using AutoMapper;
-using Microsoft.Azure.Commands.Tags.Model;
-using Microsoft.Azure.Management.Network;
 using Microsoft.Azure.Commands.Network.Models;
-using Microsoft.Azure.Commands.Resources.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
+using Microsoft.Azure.Management.Network;
+using System.Collections;
+using System.Collections.Generic;
+using System.Management.Automation;
 using MNM = Microsoft.Azure.Management.Network.Models;
 
 namespace Microsoft.Azure.Commands.Network
 {
-    [Cmdlet(VerbsCommon.New, "AzurePublicIpAddress"), OutputType(typeof(PSPublicIpAddress))]
+    [Cmdlet(VerbsCommon.New, "AzureRmPublicIpAddress", SupportsShouldProcess = true),
+        OutputType(typeof(PSPublicIpAddress))]
     public class NewAzurePublicIpAddressCommand : PublicIpAddressBaseCmdlet
     {
         [Alias("ResourceName")]
@@ -40,6 +42,7 @@ namespace Microsoft.Azure.Commands.Network
             Mandatory = true,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public virtual string ResourceGroupName { get; set; }
 
@@ -47,8 +50,20 @@ namespace Microsoft.Azure.Commands.Network
             Mandatory = false,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "The public IP address location.")]
+        [LocationCompleter("Microsoft.Network/publicIPAddresses")]
         [ValidateNotNullOrEmpty]
         public string Location { get; set; }
+
+        [Parameter(
+            Mandatory = false,
+            ValueFromPipelineByPropertyName = true,
+            HelpMessage = "The public IP Sku name.")]
+        [ValidateNotNullOrEmpty]
+        [ValidateSet(
+            MNM.PublicIPAddressSkuName.Basic,
+            MNM.PublicIPAddressSkuName.Standard,
+            IgnoreCase = true)]
+        public string Sku { get; set; }
 
         [Parameter(
             Mandatory = true,
@@ -56,10 +71,21 @@ namespace Microsoft.Azure.Commands.Network
             HelpMessage = "The public IP address allocation method.")]
         [ValidateNotNullOrEmpty]
         [ValidateSet(
-            MNM.IpAllocationMethod.Dynamic,
-            MNM.IpAllocationMethod.Static,
+            MNM.IPAllocationMethod.Dynamic,
+            MNM.IPAllocationMethod.Static,
             IgnoreCase = true)]
         public string AllocationMethod { get; set; }
+
+        [Parameter(
+            Mandatory = false,
+            ValueFromPipelineByPropertyName = true,
+            HelpMessage = "The public IP address version.")]
+        [ValidateNotNullOrEmpty]
+        [ValidateSet(
+            MNM.IPVersion.IPv4,
+            MNM.IPVersion.IPv6,
+            IgnoreCase = true)]
+        public string IpAddressVersion { get; set; }
 
         [Parameter(
             Mandatory = false,
@@ -81,36 +107,37 @@ namespace Microsoft.Azure.Commands.Network
 
         [Parameter(
             Mandatory = false,
+            HelpMessage = "A list of availability zones denoting the IP allocated for the resource needs to come from.",
+            ValueFromPipelineByPropertyName = true)]
+            public List<string> Zone { get; set; }
+
+        [Parameter(
+            Mandatory = false,
             ValueFromPipelineByPropertyName = true,
-            HelpMessage = "An array of hashtables which represents resource tags.")]
-        public Hashtable[] Tag { get; set; }
+            HelpMessage = "A hashtable which represents resource tags.")]
+        public Hashtable Tag { get; set; }
 
         [Parameter(
             Mandatory = false,
             HelpMessage = "Do not ask for confirmation if you want to overrite a resource")]
         public SwitchParameter Force { get; set; }
 
-        public override void ExecuteCmdlet()
+        public override void Execute()
         {
-            base.ExecuteCmdlet();
-
-            if (this.IsPublicIpAddressPresent(this.ResourceGroupName, this.Name))
-            {
-                ConfirmAction(
-                    Force.IsPresent,
-                    string.Format(Microsoft.Azure.Commands.Network.Properties.Resources.OverwritingResource, Name),
-                    Microsoft.Azure.Commands.Network.Properties.Resources.OverwritingResourceMessage,
-                    Name,
-                    () => CreatePublicIpAddress());
-
-                WriteObject(this.GetPublicIpAddress(this.ResourceGroupName, this.Name));
-            }
-            else
-            {
-                var publicIp = CreatePublicIpAddress();
-
-                WriteObject(publicIp);
-            }
+            base.Execute();
+            WriteWarning("The output object type of this cmdlet will be modified in a future release.");
+            var present = this.IsPublicIpAddressPresent(this.ResourceGroupName, this.Name);
+            ConfirmAction(
+                Force.IsPresent,
+                string.Format(Properties.Resources.OverwritingResource, Name),
+                Properties.Resources.CreatingResourceMessage,
+                Name,
+                () =>
+                {
+                    var publicIp = CreatePublicIpAddress();
+                    WriteObject(publicIp);
+                },
+                () => present);
         }
 
         private PSPublicIpAddress CreatePublicIpAddress()
@@ -119,6 +146,14 @@ namespace Microsoft.Azure.Commands.Network
             publicIp.Name = this.Name;
             publicIp.Location = this.Location;
             publicIp.PublicIpAllocationMethod = this.AllocationMethod;
+            publicIp.PublicIpAddressVersion = this.IpAddressVersion;
+            publicIp.Zones = this.Zone;
+
+            if (!string.IsNullOrEmpty(this.Sku))
+            {
+                publicIp.Sku = new PSPublicIpAddressSku();
+                publicIp.Sku.Name = this.Sku;
+            }
 
             if (this.IdleTimeoutInMinutes > 0)
             {
@@ -132,9 +167,8 @@ namespace Microsoft.Azure.Commands.Network
                 publicIp.DnsSettings.ReverseFqdn = this.ReverseFqdn;
             }
 
-            var publicIpModel = Mapper.Map<MNM.PublicIpAddress>(publicIp);
+            var publicIpModel = NetworkResourceManagerProfile.Mapper.Map<MNM.PublicIPAddress>(publicIp);
 
-            publicIpModel.Type = Microsoft.Azure.Commands.Network.Properties.Resources.PublicIpAddressType;
             publicIpModel.Tags = TagsConversionHelper.CreateTagDictionary(this.Tag, validate: true);
 
             this.PublicIpAddressClient.CreateOrUpdate(this.ResourceGroupName, this.Name, publicIpModel);
@@ -146,4 +180,3 @@ namespace Microsoft.Azure.Commands.Network
     }
 }
 
- 

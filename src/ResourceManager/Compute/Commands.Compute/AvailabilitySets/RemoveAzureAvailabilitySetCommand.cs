@@ -15,13 +15,14 @@
 using AutoMapper;
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.Azure.Management.Compute;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Management.Automation;
+
 
 namespace Microsoft.Azure.Commands.Compute
 {
-    [Cmdlet(VerbsCommon.Remove, ProfileNouns.AvailabilitySet)]
-    [OutputType(typeof(PSOperationResponse))]
+    [Cmdlet(VerbsCommon.Remove, ProfileNouns.AvailabilitySet, SupportsShouldProcess = true)]
+    [OutputType(typeof(PSAzureOperationResponse))]
     public class RemoveAzureAvailabilitySetCommand : AvailabilitySetBaseCmdlet
     {
         [Parameter(
@@ -29,6 +30,7 @@ namespace Microsoft.Azure.Commands.Compute
            Position = 0,
            ValueFromPipelineByPropertyName = true,
            HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -46,18 +48,26 @@ namespace Microsoft.Azure.Commands.Compute
         [ValidateNotNullOrEmpty]
         public SwitchParameter Force { get; set; }
 
+        [Parameter(Mandatory = false, HelpMessage = "Run cmdlet in the background")]
+        public SwitchParameter AsJob { get; set; }
+
         public override void ExecuteCmdlet()
         {
             base.ExecuteCmdlet();
 
-            if (this.Force.IsPresent
-            || this.ShouldContinue(Properties.Resources.AvailabilitySetRemovalConfirmation,
-                                   Properties.Resources.AvailabilitySetRemovalCaption))
+            ExecuteClientAction(() =>
             {
-                AzureOperationResponse op = this.AvailabilitySetClient.Delete(this.ResourceGroupName, this.Name);
-                var result = Mapper.Map<PSOperationResponse>(op);
-                WriteObject(result);
-            }
+                if (this.ShouldProcess(Name, VerbsCommon.Remove) 
+                    && (this.Force.IsPresent
+                    || this.ShouldContinue(Properties.Resources.AvailabilitySetRemovalConfirmation, Properties.Resources.AvailabilitySetRemovalCaption)))
+                {
+                    var op = this.AvailabilitySetClient.DeleteWithHttpMessagesAsync(
+                        this.ResourceGroupName,
+                        this.Name).GetAwaiter().GetResult();
+                    var result = ComputeAutoMapperProfile.Mapper.Map<PSAzureOperationResponse>(op);
+                    WriteObject(result);
+                }
+            });
         }
     }
 }

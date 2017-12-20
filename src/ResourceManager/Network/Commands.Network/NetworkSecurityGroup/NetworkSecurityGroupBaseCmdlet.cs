@@ -13,25 +13,24 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Net;
 using AutoMapper;
 using Microsoft.Azure.Commands.Network.Models;
-using Microsoft.Azure.Commands.Tags.Model;
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
 using Microsoft.Azure.Management.Network;
-using Microsoft.Azure.Commands.Resources.Models;
-using Hyak.Common;
+using System.Net;
+using System.Collections;
+using System.Collections.Generic;
+using Microsoft.Azure.Management.Network.Models;
 
 namespace Microsoft.Azure.Commands.Network
 {
-    using Microsoft.Azure.Management.Network.Models;
-
     public abstract class NetworkSecurityGroupBaseCmdlet : NetworkBaseCmdlet
     {
-        public INetworkSecurityGroupOperations NetworkSecurityGroupClient
+        public INetworkSecurityGroupsOperations NetworkSecurityGroupClient
         {
             get
             {
-                return NetworkClient.NetworkResourceProviderClient.NetworkSecurityGroups;
+                return NetworkClient.NetworkManagementClient.NetworkSecurityGroups;
             }
         }
 
@@ -41,7 +40,7 @@ namespace Microsoft.Azure.Commands.Network
             {
                 GetNetworkSecurityGroup(resourceGroupName, name);
             }
-            catch (CloudException exception)
+            catch (Microsoft.Rest.Azure.CloudException exception)
             {
                 if (exception.Response.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -55,22 +54,54 @@ namespace Microsoft.Azure.Commands.Network
             return true;
         }
 
-        public PSNetworkSecurityGroup GetNetworkSecurityGroup(string resourceGroupName, string name)
+        public PSNetworkSecurityGroup GetNetworkSecurityGroup(string resourceGroupName, string name, string expandResource = null)
         {
-            var getNetworkSecurityGroupResponse = this.NetworkSecurityGroupClient.Get(resourceGroupName, name);
+            var nsg = this.NetworkSecurityGroupClient.Get(resourceGroupName, name, expandResource);
 
-            var networkSecurityGroup = Mapper.Map<PSNetworkSecurityGroup>(getNetworkSecurityGroupResponse.NetworkSecurityGroup);
-            networkSecurityGroup.ResourceGroupName = resourceGroupName;
+            var psNetworkSecurityGroup = NetworkResourceManagerProfile.Mapper.Map<PSNetworkSecurityGroup>(nsg);
+            psNetworkSecurityGroup.ResourceGroupName = resourceGroupName;
 
-            networkSecurityGroup.Tag =
-                TagsConversionHelper.CreateTagHashtable(getNetworkSecurityGroupResponse.NetworkSecurityGroup.Tags);
+            psNetworkSecurityGroup.Tag = TagsConversionHelper.CreateTagHashtable(nsg.Tags);
 
-            return networkSecurityGroup;
+            return psNetworkSecurityGroup;
+        }
+
+		// Temporary - to be removed
+		public void NullifyApplicationSecurityGroupsIfAbsent(NetworkSecurityGroup nsg)
+		{
+			if (nsg == null)
+			{
+				return;
+			}
+
+            this.NullifyApplicationSecurityRulesIfAbsent(nsg.DefaultSecurityRules);
+            this.NullifyApplicationSecurityRulesIfAbsent(nsg.SecurityRules);
+        }
+
+        public void NullifyApplicationSecurityRulesIfAbsent(IList<SecurityRule> rules)
+        {
+            if (rules == null)
+            {
+                return;
+            }
+
+            foreach (var rule in rules)
+            {
+                if (rule.SourceApplicationSecurityGroups != null && rule.SourceApplicationSecurityGroups.Count == 0)
+                {
+                    rule.SourceApplicationSecurityGroups = null;
+                }
+
+                if (rule.DestinationApplicationSecurityGroups != null && rule.DestinationApplicationSecurityGroups.Count == 0)
+                {
+                    rule.DestinationApplicationSecurityGroups = null;
+                }
+            }
         }
 
         public PSNetworkSecurityGroup ToPsNetworkSecurityGroup(NetworkSecurityGroup nsg)
         {
-            var psNsg = Mapper.Map<PSNetworkSecurityGroup>(nsg);
+            var psNsg = NetworkResourceManagerProfile.Mapper.Map<PSNetworkSecurityGroup>(nsg);
 
             psNsg.Tag = TagsConversionHelper.CreateTagHashtable(nsg.Tags);
 

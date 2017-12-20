@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,30 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Sql.Common;
 using System;
 using System.Globalization;
 using System.Linq;
-using Microsoft.Azure.Commands.Sql.Security.Services;
-using Microsoft.Azure.Commands.Sql.Properties;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Azure.Commands.Sql.Services
 {
     public class Util
     {
-        /// <summary>
-        /// Generates a client side tracing Id of the format:
-        /// [Guid]
-        /// </summary>
-        /// <returns>A string representation of the client side tracing Id.</returns>
-        public static string GenerateTracingId()
-        {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                "{0}",
-                Guid.NewGuid().ToString()
-            );
-        }
-
         /// <summary>
         /// In cases where the user decided to use one of the shortcuts (ALL or NONE), this method sets the value of the EventType property to reflect the correct values.
         /// In addition the is a deprecated audit events validity check.
@@ -78,45 +64,35 @@ namespace Microsoft.Azure.Commands.Sql.Services
             {
                 if (eventTypes.Contains(SecurityConstants.All))
                 {
-                    throw new Exception(string.Format(Resources.InvalidEventTypeSet, SecurityConstants.All));
+                    throw new Exception(string.Format(Properties.Resources.InvalidEventTypeSet, SecurityConstants.All));
                 }
                 if (eventTypes.Contains(SecurityConstants.None))
                 {
-                    throw new Exception(string.Format(Resources.InvalidEventTypeSet, SecurityConstants.None));
+                    throw new Exception(string.Format(Properties.Resources.InvalidEventTypeSet, SecurityConstants.None));
                 }
-
-                if (DeprecatedEventTypeFound(eventTypes))
-                {
-                    if(eventTypes.Intersect(auditEvents).Any())
-                    {
-                        // If the event types includes new events and deprecated events we throw error
-                    throw new Exception(Resources.InvalidDeprecatedEventTypeSet);
-                    }
-                }
-
             }
             return eventTypes;
         }
-        
+
         /// <summary>
-        /// Checks whether a deprected event type is found in the received array of event types
+        /// Checks if email addresses are in a correct format
         /// </summary>
-        internal static bool DeprecatedEventTypeFound(string[] eventType)
+        /// <param name="emailAddresses">The email addresses</param>
+        /// <param name="seperator">The character that seperates different emails in the emailAddresses string</param>
+        /// <returns>Returns whether the email addresses are in a correct format</returns>
+        public static bool AreEmailAddressesInCorrectFormat(string emailAddresses, char seperator)
         {
-            if(eventType == null)
+            if (string.IsNullOrEmpty(emailAddresses))
             {
-                return false;
+                return true;
             }
 
-            string[] deprecatedAuditEvents = 
-            {
-                SecurityConstants.DeprecatedAuditEvents.DataAccess,
-                SecurityConstants.DeprecatedAuditEvents.DataChanges,
-                SecurityConstants.DeprecatedAuditEvents.SecurityExceptions,
-                SecurityConstants.DeprecatedAuditEvents.RevokePermissions,
-                SecurityConstants.DeprecatedAuditEvents.SchemaChanges
-            };
-            return eventType.Intersect(deprecatedAuditEvents).Any();
+            string[] emailAddressesArray = emailAddresses.Split(seperator).Where(s => !string.IsNullOrEmpty(s)).ToArray();
+            var emailRegex =
+                new Regex(string.Format("{0}{1}",
+                    @"^(?("")("".+?(?<!\\)""@)|(([0-9a-z]((\.(?!\.))|[-!#\$%&'\*\+/=\?\^`\{\}\|~\w])*)(?<=[0-9a-z])@))",
+                    @"(?(\[)(\[(\d{1,3}\.){3}\d{1,3}\])|(([0-9a-z][-\w]*[0-9a-z]*\.)+[a-z0-9][\-a-z0-9]{0,22}[a-z0-9]))$"));
+            return !emailAddressesArray.Any(e => !emailRegex.IsMatch(e));
         }
     }
 }

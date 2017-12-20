@@ -15,26 +15,57 @@
 
 namespace Microsoft.Azure.Commands.Network.Models
 {
+    using Newtonsoft.Json;
+    using System.Collections.Generic;
+
     public class PSSecurityRule : PSChildResource
     {
+        [JsonProperty(Order = 1)]
         public string Description { get; set; }
 
+        [JsonProperty(Order = 1)]
         public string Protocol { get; set; }
 
-        public string SourcePortRange { get; set; }
+        [JsonProperty(Order = 1)]
+        public IList<string> SourcePortRange { get; set; }
 
-        public string DestinationPortRange { get; set; }
+        [JsonProperty(Order = 1)]
+        public IList<string> DestinationPortRange { get; set; }
 
-        public string SourceAddressPrefix { get; set; }
+        [JsonProperty(Order = 1)]
+        public IList<string> SourceAddressPrefix { get; set; }
 
-        public string DestinationAddressPrefix { get; set; }
+        [JsonProperty(Order = 1)]
+        public IList<string> DestinationAddressPrefix { get; set; }
 
+        [JsonProperty(Order = 1)]
         public string Access { get; set; }
 
+        [JsonProperty(Order = 1)]
         public int Priority { get; set; }
 
+        [JsonProperty(Order = 1)]
         public string Direction { get; set; }
 
+        [JsonProperty(Order = 1)]
         public string ProvisioningState { get; set; }
+
+        [JsonProperty(Order = 1)]
+        public List<PSApplicationSecurityGroup> SourceApplicationSecurityGroups { get; set; }
+
+        [JsonProperty(Order = 1)]
+        public List<PSApplicationSecurityGroup> DestinationApplicationSecurityGroups { get; set; }
+
+        [JsonIgnore]
+        public string SourceApplicationSecurityGroupsText
+        {
+            get { return JsonConvert.SerializeObject(SourceApplicationSecurityGroups, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
+        }
+
+        [JsonIgnore]
+        public string DestinationApplicationSecurityGroupsText
+        {
+            get { return JsonConvert.SerializeObject(DestinationApplicationSecurityGroups, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
+        }
     }
 }

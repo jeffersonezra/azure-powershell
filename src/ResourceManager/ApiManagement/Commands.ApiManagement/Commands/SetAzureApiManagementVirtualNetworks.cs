@@ -14,16 +14,18 @@
 
 namespace Microsoft.Azure.Commands.ApiManagement.Commands
 {
-    using System.Management.Automation;
     using Microsoft.Azure.Commands.ApiManagement.Models;
+    using ResourceManager.Common.ArgumentCompleters;
+    using System.Management.Automation;
 
-    [Cmdlet(VerbsCommon.Set, "AzureApiManagementVirtualNetworks"), OutputType(typeof (PsApiManagement))]
+    [Cmdlet(VerbsCommon.Set, "AzureRmApiManagementVirtualNetworks"), OutputType(typeof(PsApiManagement))]
     public class SetAzureApiManagementVirtualNetworks : AzureApiManagementCmdletBase
     {
         [Parameter(
             ValueFromPipelineByPropertyName = true,
             Mandatory = true,
             HelpMessage = "Name of resource group under which API Management exists.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 

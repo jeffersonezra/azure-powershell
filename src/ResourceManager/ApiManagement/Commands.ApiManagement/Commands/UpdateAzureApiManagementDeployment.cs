@@ -15,16 +15,17 @@
 
 namespace Microsoft.Azure.Commands.ApiManagement.Commands
 {
+    using Microsoft.Azure.Commands.ApiManagement.Models;
+    using ResourceManager.Common.ArgumentCompleters;
     using System;
     using System.Collections.Generic;
     using System.Management.Automation;
-    using Microsoft.Azure.Commands.ApiManagement.Models;
 
-    [Cmdlet(VerbsData.Update, "AzureApiManagementDeployment", DefaultParameterSetName = DefaultParameterSetName), OutputType(typeof(PsApiManagement))]
+    [Cmdlet(VerbsData.Update, "AzureRmApiManagementDeployment", DefaultParameterSetName = DefaultParameterSetName), OutputType(typeof(PsApiManagement))]
     public class UpdateAzureApiManagementDeployment : AzureApiManagementCmdletBase
     {
-        internal const string FromPsApiManagementInstanceSetName = "Update from PsApiManagement instance";
-        internal const string DefaultParameterSetName = "Specific API Management service";
+        internal const string FromPsApiManagementInstanceSetName = "UpdateFromPsApiManagementInstance";
+        internal const string DefaultParameterSetName = "UpdateSpecificService";
 
         [Parameter(
             ParameterSetName = FromPsApiManagementInstanceSetName,
@@ -39,24 +40,22 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
             ValueFromPipelineByPropertyName = true,
             Mandatory = true,
             HelpMessage = "Name of resource group under which API Management exists.")]
+        [ResourceGroupCompleter()]
         public string ResourceGroupName { get; set; }
 
         [Parameter(
-            ParameterSetName = DefaultParameterSetName, 
-            ValueFromPipelineByPropertyName = true, 
-            Mandatory = true, 
+            ParameterSetName = DefaultParameterSetName,
+            ValueFromPipelineByPropertyName = true,
+            Mandatory = true,
             HelpMessage = "Name of API Management.")]
         public string Name { get; set; }
 
         [Parameter(
-            ParameterSetName = DefaultParameterSetName, 
-            ValueFromPipelineByPropertyName = true, 
-            Mandatory = true, 
+            ParameterSetName = DefaultParameterSetName,
+            ValueFromPipelineByPropertyName = true,
+            Mandatory = true,
             HelpMessage = "Location of master API Management deployment region.")]
-        [ValidateSet(
-            "North Central US", "South Central US", "Central US", "West Europe", "North Europe", "West US", "East US",
-            "East US 2", "Japan East", "Japan West", "Brazil South", "Southeast Asia", "East Asia", "Australia East",
-            "Australia Southeast", IgnoreCase = false)]
+        [LocationCompleter("Microsoft.ApiManagement/service")]
         public string Location { get; set; }
 
         [Parameter(
@@ -84,6 +83,13 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
             ParameterSetName = DefaultParameterSetName,
             ValueFromPipelineByPropertyName = true,
             Mandatory = false,
+            HelpMessage = "Vpn Type of service Azure API Management. Valid values are None, External and Internal. Default value is None.")]
+        public PsApiManagementVpnType VpnType { get; set; }
+
+        [Parameter(
+            ParameterSetName = DefaultParameterSetName,
+            ValueFromPipelineByPropertyName = true,
+            Mandatory = false,
             HelpMessage = "Additional deployment regions of Azure API Management.")]
         public IList<PsApiManagementRegion> AdditionalRegions { get; set; }
 
@@ -96,6 +102,7 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
         {
             string resourceGroupName, name, location;
             PsApiManagementSku sku;
+            PsApiManagementVpnType vpnType;
             int capacity;
             PsApiManagementVirtualNetwork virtualNetwork;
             IList<PsApiManagementRegion> additionalRegions;
@@ -109,6 +116,7 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
                 capacity = Capacity;
                 virtualNetwork = VirtualNetwork;
                 additionalRegions = AdditionalRegions;
+                vpnType = VpnType;
             }
             else if (ParameterSetName.Equals(FromPsApiManagementInstanceSetName, StringComparison.OrdinalIgnoreCase))
             {
@@ -119,6 +127,7 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
                 capacity = ApiManagement.Capacity;
                 virtualNetwork = ApiManagement.VirtualNetwork;
                 additionalRegions = ApiManagement.AdditionalRegions;
+                vpnType = ApiManagement.VpnType;
             }
             else
             {
@@ -133,6 +142,7 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
                     sku,
                     capacity,
                     virtualNetwork,
+                    vpnType,
                     additionalRegions),
                 PassThru.IsPresent);
         }

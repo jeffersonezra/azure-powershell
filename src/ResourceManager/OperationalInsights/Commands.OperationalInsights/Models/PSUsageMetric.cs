@@ -12,9 +12,9 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Management.OperationalInsights.Models;
 using System;
 using System.Xml;
-using Microsoft.Azure.Management.OperationalInsights.Models;
 
 namespace Microsoft.Azure.Commands.OperationalInsights.Models
 {
@@ -37,8 +37,8 @@ namespace Microsoft.Azure.Commands.OperationalInsights.Models
                 this.Name = metric.Name.LocalizedValue;
             }
 
-            this.CurrentValue = metric.CurrentValue;
-            this.Limit = metric.Limit;
+            this.CurrentValue = metric.CurrentValue.Value;
+            this.Limit = metric.Limit.Value;
             this.NextResetTime = metric.NextResetTime;
             this.Unit = metric.Unit;
             this.QuotaPeriod = !string.IsNullOrWhiteSpace(metric.QuotaPeriod) ? XmlConvert.ToTimeSpan(metric.QuotaPeriod) : TimeSpan.Zero;

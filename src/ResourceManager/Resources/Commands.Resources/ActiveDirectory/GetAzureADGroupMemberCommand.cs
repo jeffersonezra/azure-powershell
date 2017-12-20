@@ -12,18 +12,19 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using Microsoft.Azure.Commands.ActiveDirectory.Models;
-using Microsoft.Azure.Commands.Resources.Models.ActiveDirectory;
+using Microsoft.Azure.Graph.RBAC.Version1_6.ActiveDirectory;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
+using ProjectResources = Microsoft.Azure.Commands.Resources.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.ActiveDirectory
 {
     /// <summary>
     /// Get AD groups members.
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureADGroupMember", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADObject>))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmADGroupMember", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADObject>))]
     public class GetAzureADGroupMemberCommand : ActiveDirectoryBaseCmdlet
     {
         [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true, HelpMessage = "The user email address.")]
@@ -32,16 +33,25 @@ namespace Microsoft.Azure.Commands.ActiveDirectory
 
         public override void ExecuteCmdlet()
         {
-            ADObjectFilterOptions options = new ADObjectFilterOptions
+            ExecutionBlock(() =>
             {
-                Id = GroupObjectId == Guid.Empty ? null : GroupObjectId.ToString(),
-                Paging = true
-            };
+                ADObjectFilterOptions options = new ADObjectFilterOptions
+                {
+                    Id = GroupObjectId == Guid.Empty ? null : GroupObjectId.ToString(),
+                    Paging = true
+                };
 
-            do
-            {
-                WriteObject(ActiveDirectoryClient.GetGroupMembers(options), true);
-            } while (!string.IsNullOrEmpty(options.NextLink));
+                PSADObject group = ActiveDirectoryClient.FilterGroups(options).FirstOrDefault();
+                if (group == null)
+                {
+                    throw new KeyNotFoundException(string.Format(ProjectResources.GroupDoesntExist, GroupObjectId));
+                }
+
+                do
+                {
+                    WriteObject(ActiveDirectoryClient.GetGroupMembers(options), true);
+                } while (!string.IsNullOrEmpty(options.NextLink));
+            });
         }
     }
 }

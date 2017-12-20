@@ -12,21 +12,21 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Automation.Common;
+using Microsoft.Azure.Commands.Automation.Model;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Collections.Generic;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.Automation.Common;
-using Microsoft.Azure.Commands.Automation.Model;
-using Microsoft.WindowsAzure.Commands.Utilities.Common;
 
 namespace Microsoft.Azure.Commands.Automation.Cmdlet
 {
     /// <summary>
     /// Gets azure automation accounts, filterd by automation account name and location.
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureAutomationAccount", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
+    [Cmdlet(VerbsCommon.Get, "AzureRmAutomationAccount", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
     [OutputType(typeof(AutomationAccount))]
-    public class GetAzureAutomationAccount : AzurePSCmdlet
+    public class GetAzureAutomationAccount : ResourceManager.Common.AzureRMCmdlet
     {
         /// <summary>
         /// The automation client.
@@ -40,7 +40,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         {
             get
             {
-                return this.automationClient = this.automationClient ?? new AutomationClient(Profile, Profile.Context.Subscription);
+                return this.automationClient = this.automationClient ?? new AutomationClient(DefaultProfile.DefaultContext);
             }
 
             set
@@ -54,6 +54,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// </summary>
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByAll, Position = 0, Mandatory = false, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group name.")]
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByAutomationAccountName, Position = 0, Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         public string ResourceGroupName { get; set; }
 
         /// <summary>
@@ -73,8 +74,8 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
             IEnumerable<AutomationAccount> ret = null;
             if (this.ParameterSetName == AutomationCmdletParameterSets.ByAutomationAccountName)
             {
-                ret = new List<AutomationAccount> 
-                { 
+                ret = new List<AutomationAccount>
+                {
                    this.AutomationClient.GetAutomationAccount(this.ResourceGroupName, this.Name)
                 };
                 this.WriteObject(ret, true);

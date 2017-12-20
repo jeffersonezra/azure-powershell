@@ -16,9 +16,8 @@ using System;
 using System.Linq;
 using System.Management.Automation;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Azure.Commands.Common.Authentication.Abstractions;
 using Microsoft.Azure.Commands.RecoveryServices.SiteRecovery;
-using Microsoft.Azure.Common.Authentication;
-using Microsoft.Azure.Common.Authentication.Models;
 using Microsoft.Azure.Portal.RecoveryServices.Models.Common;
 using Microsoft.WindowsAzure.Management.RecoveryServices.Models;
 using Microsoft.WindowsAzure.Management.SiteRecovery.Models;
@@ -30,6 +29,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryVaultSettingsFile", DefaultParameterSetName = ASRParameterSets.ByParam)]
     [OutputType(typeof(VaultSettingsFilePath))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class GetAzureSiteRecoveryVaultSettingsFile : RecoveryServicesCmdletBase
     {
         /// <summary>
@@ -94,6 +96,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 switch (this.ParameterSetName)
                 {
                     case ASRParameterSets.ByObject:
@@ -135,7 +142,7 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         /// </summary>
         private void GetByObject()
         {
-            AzureSubscription subscription = this.Profile.Context.Subscription;
+            IAzureSubscription subscription = this.Profile.Context.Subscription;
             this.Vault.SubscriptionId = subscription.Id.ToString();
 
             CloudService cloudService = RecoveryServicesClient.GetCloudServiceForVault(this.Vault);

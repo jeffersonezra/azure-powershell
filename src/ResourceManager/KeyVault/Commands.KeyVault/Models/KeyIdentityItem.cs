@@ -14,23 +14,21 @@
 
 using System;
 using System.Collections;
-using Microsoft.Azure.KeyVault.WebKey;
-using Microsoft.Azure.KeyVault;
 using KeyVaultProperties = Microsoft.Azure.Commands.KeyVault.Properties;
 
 namespace Microsoft.Azure.Commands.KeyVault.Models
 {
     public class KeyIdentityItem : ObjectIdentifier
     {
-        internal KeyIdentityItem(Microsoft.Azure.KeyVault.KeyItem keyItem, VaultUriHelper vaultUriHelper)
+        internal KeyIdentityItem(Azure.KeyVault.Models.KeyItem keyItem, VaultUriHelper vaultUriHelper)
         {
             if (keyItem == null)
-                throw new ArgumentNullException("keyItem");           
+                throw new ArgumentNullException("keyItem");
             if (keyItem.Attributes == null)
                 throw new ArgumentException(KeyVaultProperties.Resources.InvalidKeyAttributes);
             if (keyItem.Identifier == null)
                 throw new ArgumentException(KeyVaultProperties.Resources.InvalidKeyIdentifier);
-         
+
             SetObjectIdentifier(vaultUriHelper, keyItem.Identifier);
 
             Enabled = keyItem.Attributes.Enabled;
@@ -38,6 +36,7 @@ namespace Microsoft.Azure.Commands.KeyVault.Models
             NotBefore = keyItem.Attributes.NotBefore;
             Created = keyItem.Attributes.Created;
             Updated = keyItem.Attributes.Updated;
+            RecoveryLevel = keyItem.Attributes.RecoveryLevel;
             Tags = (keyItem.Tags == null) ? null : keyItem.Tags.ConvertToHashtable();
         }
 
@@ -49,12 +48,13 @@ namespace Microsoft.Azure.Commands.KeyVault.Models
                 throw new ArgumentException(KeyVaultProperties.Resources.InvalidKeyAttributes);
 
             SetObjectIdentifier(keyBundle);
-                                  
+
             Enabled = keyBundle.Attributes.Enabled;
             Expires = keyBundle.Attributes.Expires;
             NotBefore = keyBundle.Attributes.NotBefore;
             Created = keyBundle.Attributes.Created;
             Updated = keyBundle.Attributes.Updated;
+            RecoveryLevel = keyBundle.Attributes.RecoveryLevel;
             Tags = keyBundle.Attributes.Tags;
         }
 
@@ -63,16 +63,21 @@ namespace Microsoft.Azure.Commands.KeyVault.Models
         public DateTime? Expires { get; set; }
 
         public DateTime? NotBefore { get; set; }
-               
+
         public DateTime? Created { get; private set; }
 
         public DateTime? Updated { get; private set; }
 
-        public Hashtable Tags { get; set; }      
-       
-        public string TagsTable 
-        { 
-            get { return (Tags == null) ? null : Tags.ConvertToTagsTable(); } 
-        }        
+        [Obsolete( "The PurgeDisabled property is being deprecated and will be removed in a future release. Please use the RecoveryLevel property instead." )]
+        public bool PurgeDisabled { get; private set; }
+
+        public string RecoveryLevel { get; private set; }
+
+        public Hashtable Tags { get; set; }
+
+        public string TagsTable
+        {
+            get { return (Tags == null) ? null : Tags.ConvertToTagsTable(); }
+        }
     }
 }

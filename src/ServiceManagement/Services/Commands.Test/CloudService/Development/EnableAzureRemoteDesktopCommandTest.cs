@@ -27,14 +27,15 @@ using Microsoft.WindowsAzure.Commands.Utilities.Common.XmlSchema.ServiceDefiniti
 using Microsoft.WindowsAzure.Commands.Common;
 using Microsoft.WindowsAzure.Commands.ScenarioTest;
 using Xunit;
-using Microsoft.Azure.Common.Authentication;
+using Microsoft.Azure.Commands.Common.Authentication;
+using Microsoft.Azure.Commands.Common.Authentication.Abstractions;
 
 namespace Microsoft.WindowsAzure.Commands.Test.CloudService.Development
 {
     /// <summary>
     /// Basic unit tests for the Enable-AzureServiceProjectRemoteDesktop enableRDCmdlet.
     /// </summary>
-    public class EnableAzureRemoteDesktopCommandTest : TestBase
+    public class EnableAzureRemoteDesktopCommandTest : SMTestBase
     {
         static private MockCommandRuntime mockCommandRuntime;
 

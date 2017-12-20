@@ -12,14 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.DataFactories.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Collections;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.DataFactories.Models;
 
 namespace Microsoft.Azure.Commands.DataFactories
 {
-    [Cmdlet(VerbsCommon.New, Constants.DataFactory), OutputType(typeof(PSDataFactory))]
+    [Cmdlet(VerbsCommon.New, Constants.DataFactory, SupportsShouldProcess = true), 
+        OutputType(typeof(PSDataFactory))]
     public class NewAzureDataFactoryCommand : DataFactoryBaseCmdlet
     {
         [Parameter(Position = 1, Mandatory = true, ValueFromPipelineByPropertyName = true,
@@ -29,6 +31,7 @@ namespace Microsoft.Azure.Commands.DataFactories
 
         [Parameter(Position = 2, Mandatory = true, ValueFromPipelineByPropertyName = true,
             HelpMessage = "The geographic region to create the data factory.")]
+        [LocationCompleter("Microsoft.DataFactory/datafactories")]
         [ValidateNotNullOrEmpty]
         public string Location { get; set; }
 

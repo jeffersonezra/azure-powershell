@@ -32,19 +32,46 @@ function Get-VaultName
 
 <#
 .SYNOPSIS
-Gets the location for the Website. Default to West US if none found.
+Gets test mode - 'Record' or 'Playback'
+#>
+function Get-KeyVaultTestMode {
+    try {
+        $testMode = [Microsoft.Azure.Test.HttpRecorder.HttpMockServer]::Mode;
+        $testMode = $testMode.ToString();
+    } catch {
+        if ($PSItem.Exception.Message -like '*Unable to find type*') {
+            $testMode = 'Record';
+        } else {
+            throw;
+        }
+    }
+
+    return $testMode
+}
+
+<#
+.SYNOPSIS
+Gets the location for the Vault. Default to West US if none found.
 #>
 function Get-Location
 {
-    $location = Get-AzureLocation | where {$_.Name -eq "Microsoft.KeyVault/vaults"}
-	if ($location -eq $null) 
+    if ((Get-KeyVaultTestMode) -ne 'Playback')
 	{
-		return "East US"
-	} 
-	else 
-	{
-        $location.Locations[0]
+		$namespace = "Microsoft.KeyVault"  
+		$type = "vaults"
+		$location = Get-AzureRmResourceProvider -ProviderNamespace $namespace | where {$_.ResourceTypes[0].ResourceTypeName -eq $type}  
+  
+		if ($location -eq $null) 
+		{  
+			return "East US"  
+		} 
+        else 
+		{  
+			return $location.Locations[0]  
+		}  
 	}
+
+	return "East US"
 }
 
 <#
@@ -53,12 +80,28 @@ Gets the default location for a provider
 #>
 function Get-ProviderLocation($provider)
 {
-    $location = Get-AzureLocation | where {$_.Name -eq $provider}
-    if ($location -eq $null) {
-        "East US"
-    } else {
-        $location.Locations[0]
-    }
+	if ((Get-KeyVaultTestMode) -ne 'Playback')
+	{
+		$namespace = $provider.Split("/")[0]  
+		if($provider.Contains("/"))  
+		{  
+			$type = $provider.Substring($namespace.Length + 1)  
+			$location = Get-AzureRmResourceProvider -ProviderNamespace $namespace | where {$_.ResourceTypes[0].ResourceTypeName -eq $type}  
+  
+			if ($location -eq $null) 
+			{  
+				return "East US"  
+			} 
+            else 
+			{  
+				return $location.Locations[0]  
+			}  
+		}
+		
+		return "East US"
+	}
+
+	return "East US"
 }
 
 <#
@@ -67,7 +110,7 @@ Cleans the created resource groups
 #>
 function Clean-ResourceGroup($rgname)
 {
-    if ([Microsoft.Azure.Test.HttpRecorder.HttpMockServer]::Mode -ne [Microsoft.Azure.Test.HttpRecorder.HttpRecorderMode]::Playback) {
-        Remove-AzureResourceGroup -Name $rgname -Force
+    if ((Get-KeyVaultTestMode) -ne 'Playback') {
+        Remove-AzureRmResourceGroup -Name $rgname -Force
     }
 }

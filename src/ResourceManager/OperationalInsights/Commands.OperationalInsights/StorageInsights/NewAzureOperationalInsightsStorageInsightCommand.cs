@@ -12,13 +12,15 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.OperationalInsights.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Linq;
 using System.Management.Automation;
-using Microsoft.Azure.Commands.OperationalInsights.Models;
 
 namespace Microsoft.Azure.Commands.OperationalInsights
 {
-    [Cmdlet(VerbsCommon.New, Constants.StorageInsight, DefaultParameterSetName = ByWorkspaceName), OutputType(typeof(PSStorageInsight))]
+    [Cmdlet(VerbsCommon.New, Constants.StorageInsight, SupportsShouldProcess = true, 
+        DefaultParameterSetName = ByWorkspaceName), OutputType(typeof(PSStorageInsight))]
     public class NewAzureOperationalInsightsStorageInsightCommand : OperationalInsightsBaseCmdlet
     {
         [Parameter(Position = 0, ParameterSetName = ByWorkspaceObject, Mandatory = true, ValueFromPipeline = true,
@@ -26,12 +28,13 @@ namespace Microsoft.Azure.Commands.OperationalInsights
         [ValidateNotNull]
         public PSWorkspace Workspace { get; set; }
 
-        [Parameter(Position = 1, ParameterSetName = ByWorkspaceName, Mandatory = true, ValueFromPipelineByPropertyName = true, 
+        [Parameter(Position = 1, ParameterSetName = ByWorkspaceName, Mandatory = true, ValueFromPipelineByPropertyName = true,
             HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
-        [Parameter(Position = 2, ParameterSetName = ByWorkspaceName, Mandatory = true, ValueFromPipelineByPropertyName = true, 
+        [Parameter(Position = 2, ParameterSetName = ByWorkspaceName, Mandatory = true, ValueFromPipelineByPropertyName = true,
             HelpMessage = "The name of the workspace that will contain the storage insight.")]
         [ValidateNotNullOrEmpty]
         public string WorkspaceName { get; set; }

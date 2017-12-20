@@ -15,7 +15,7 @@
 using AutoMapper;
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.Azure.Management.Compute;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using System.Collections.Generic;
 using System.Management.Automation;
 
@@ -30,6 +30,7 @@ namespace Microsoft.Azure.Commands.Compute
            Position = 0,
            ValueFromPipelineByPropertyName = true,
            HelpMessage = "The resource group name.")]
+        [ResourceGroupCompleter()]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -45,25 +46,33 @@ namespace Microsoft.Azure.Commands.Compute
         {
             base.ExecuteCmdlet();
 
-            if (string.IsNullOrEmpty(this.Name))
+            ExecuteClientAction(() =>
             {
-                var result = this.AvailabilitySetClient.List(this.ResourceGroupName);
-
-                List<PSAvailabilitySet> psResultList = new List<PSAvailabilitySet>();
-                foreach (var item in result.AvailabilitySets)
+                if (string.IsNullOrEmpty(this.Name))
                 {
-                    var psItem = Mapper.Map<PSAvailabilitySet>(item);
-                    psResultList.Add(psItem);
-                }
+                    var result = this.AvailabilitySetClient.ListWithHttpMessagesAsync(this.ResourceGroupName).GetAwaiter().GetResult();
 
-                WriteObject(psResultList, true);
-            }
-            else
-            {
-                var result = this.AvailabilitySetClient.Get(this.ResourceGroupName, this.Name);
-                var psResult = Mapper.Map<PSAvailabilitySet>(result.AvailabilitySet);
-                WriteObject(psResult);
-            }
+                    var psResultList = new List<PSAvailabilitySet>();
+                    foreach (var item in result.Body)
+                    {
+                        var psItem = ComputeAutoMapperProfile.Mapper.Map<PSAvailabilitySet>(result);
+                        psItem = ComputeAutoMapperProfile.Mapper.Map(item, psItem);
+                        psResultList.Add(psItem);
+                    }
+
+                    WriteObject(psResultList, true);
+                }
+                else
+                {
+                    var result = this.AvailabilitySetClient.GetWithHttpMessagesAsync(this.ResourceGroupName, this.Name).GetAwaiter().GetResult();
+                    var psResult = ComputeAutoMapperProfile.Mapper.Map<PSAvailabilitySet>(result);
+                    if (result.Body != null)
+                    {
+                        psResult = ComputeAutoMapperProfile.Mapper.Map(result.Body, psResult);
+                    }
+                    WriteObject(psResult);
+                }
+            });
         }
     }
 }

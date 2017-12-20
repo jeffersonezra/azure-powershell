@@ -64,7 +64,7 @@ namespace Microsoft.Azure.Commands.Dns
         /// <summary>
         /// Gets or sets the tags of this record set.
         /// </summary>
-        public Hashtable[] Tags { get; set; }
+        public Hashtable Metadata { get; set; }
 
         /// <summary>
         /// Returns a deep copy of this record set
@@ -86,9 +86,9 @@ namespace Microsoft.Azure.Commands.Dns
                 clone.Records = this.Records.Select(record => record.Clone()).Cast<DnsRecordBase>().ToList();
             }
 
-            if (this.Tags != null)
+            if (this.Metadata != null)
             {
-                clone.Tags = this.Tags.Select(tag => tag.Clone()).Cast<Hashtable>().ToArray();
+                clone.Metadata = (Hashtable)this.Metadata.Clone();
             }
 
             return clone;
@@ -101,6 +101,16 @@ namespace Microsoft.Azure.Commands.Dns
     public abstract class DnsRecordBase : ICloneable
     {
         public abstract object Clone();
+
+        public const int TxtRecordMaxLength = 1024;
+
+        public const int TxtRecordMinLength = 0;
+
+        public const int TxtRecordChunkSize = 255;
+
+        public const int CaaRecordMaxLength = 1024;
+
+        public const int CaaRecordMinLength = 0;
 
         internal abstract object ToMamlRecord();
 
@@ -144,7 +154,7 @@ namespace Microsoft.Azure.Commands.Dns
                 return new MxRecord
                 {
                     Exchange = mamlRecord.Exchange,
-                    Preference = mamlRecord.Preference,
+                    Preference = (ushort) mamlRecord.Preference,
                 };
             }
             else if (record is Management.Dns.Models.SrvRecord)
@@ -152,10 +162,10 @@ namespace Microsoft.Azure.Commands.Dns
                 var mamlRecord = (Management.Dns.Models.SrvRecord)record;
                 return new SrvRecord
                 {
-                    Port = mamlRecord.Port,
-                    Priority = mamlRecord.Priority,
+                    Port = (ushort) mamlRecord.Port,
+                    Priority = (ushort) mamlRecord.Priority,
                     Target = mamlRecord.Target,
-                    Weight = mamlRecord.Weight,
+                    Weight = (ushort) mamlRecord.Weight,
                 };
             }
             else if (record is Management.Dns.Models.SoaRecord)
@@ -164,12 +174,12 @@ namespace Microsoft.Azure.Commands.Dns
                 return new SoaRecord
                 {
                     Email = mamlRecord.Email,
-                    ExpireTime = mamlRecord.ExpireTime,
+                    ExpireTime = (uint) mamlRecord.ExpireTime.GetValueOrDefault(),
                     Host = mamlRecord.Host,
-                    MinimumTtl = mamlRecord.MinimumTtl,
-                    RefreshTime = mamlRecord.RefreshTime,
-                    RetryTime = mamlRecord.RetryTime,
-                    SerialNumber = mamlRecord.SerialNumber,
+                    MinimumTtl = (uint) mamlRecord.MinimumTtl.GetValueOrDefault(),
+                    RefreshTime = (uint) mamlRecord.RefreshTime.GetValueOrDefault(),
+                    RetryTime = (uint) mamlRecord.RetryTime.GetValueOrDefault(),
+                    SerialNumber = (uint) mamlRecord.SerialNumber.GetValueOrDefault(),
                 };
             }
             else if (record is Management.Dns.Models.TxtRecord)
@@ -177,18 +187,52 @@ namespace Microsoft.Azure.Commands.Dns
                 var mamlRecord = (Management.Dns.Models.TxtRecord)record;
                 return new TxtRecord
                 {
-                    Value = mamlRecord.Value
+                    Value = ToPowerShellTxtValue(mamlRecord.Value),
+                };
+            }
+            else if (record is Management.Dns.Models.PtrRecord)
+            {
+                var mamlRecord = (Management.Dns.Models.PtrRecord)record;
+                return new PtrRecord
+                {
+                    Ptrdname = mamlRecord.Ptrdname,
+                };
+            }
+            else if (record is Management.Dns.Models.CaaRecord)
+            {
+                var mamlRecord = (Management.Dns.Models.CaaRecord)record;
+                return new CaaRecord
+                {
+                    Flags = (byte) mamlRecord.Flags.GetValueOrDefault(),
+                    Value = mamlRecord.Value,
+                    Tag = mamlRecord.Tag,
                 };
             }
 
             return null;
+        }
+
+        private static string ToPowerShellTxtValue(ICollection<string> value)
+        {
+            if (value == null || value.Count == 0)
+            {
+                return null;
+            }
+            
+            var sb = new StringBuilder();
+            foreach (var s in value)
+            {
+                sb.Append(s);
+            }
+
+            return sb.ToString();
         }
     }
 
     /// <summary>
     /// Represents a DNS record of type A that is part of a <see cref="DnsRecordSet"/>.
     /// </summary>
-    public class ARecord :  DnsRecordBase
+    public class ARecord : DnsRecordBase
     {
         /// <summary>
         /// Gets or sets the IPv4 address of this A record in string notation
@@ -334,9 +378,29 @@ namespace Microsoft.Azure.Commands.Dns
 
         internal override object ToMamlRecord()
         {
+            char[] letters = this.Value.ToCharArray();
+            var splitValues = new List<string>();
+
+            int remaining = letters.Length;
+            int begin = 0;
+            while (remaining > 0)
+            {
+                if (remaining < TxtRecordChunkSize)
+                {
+                    splitValues.Add(new string(letters, begin, remaining));
+                    remaining = 0;
+                }
+                else
+                {
+                    splitValues.Add(new string(letters, begin, TxtRecordChunkSize));
+                    begin += TxtRecordChunkSize;
+                    remaining -= TxtRecordChunkSize;
+                }
+            }
+
             return new Management.Dns.Models.TxtRecord
             {
-                Value = this.Value,
+                Value = splitValues,
             };
         }
 
@@ -436,8 +500,8 @@ namespace Microsoft.Azure.Commands.Dns
         /// <returns>A clone of this object</returns>
         public override object Clone()
         {
-            return new SrvRecord 
-            { 
+            return new SrvRecord
+            {
                 Priority = this.Priority,
                 Target = this.Target,
                 Weight = this.Weight,
@@ -511,8 +575,8 @@ namespace Microsoft.Azure.Commands.Dns
         /// <returns>A clone of this object</returns>
         public override object Clone()
         {
-            return new SoaRecord 
-            { 
+            return new SoaRecord
+            {
                 Host = this.Host,
                 Email = this.Email,
                 SerialNumber = this.SerialNumber,
@@ -523,4 +587,81 @@ namespace Microsoft.Azure.Commands.Dns
             };
         }
     }
+
+    /// <summary>
+    /// Represents a DNS record of type PTR that is part of a <see cref="DnsRecordSet"/>.
+    /// </summary>
+    public class PtrRecord : DnsRecordBase
+    {
+        /// <summary>
+        /// Gets or sets the ptr for this record.
+        /// </summary>
+        public string Ptrdname { get; set; }
+
+        public override string ToString()
+        {
+            return this.Ptrdname;
+        }
+
+        public override object Clone()
+        {
+            return new PtrRecord()
+            {
+                Ptrdname = this.Ptrdname,
+            };
+        }
+
+        internal override object ToMamlRecord()
+        {
+            return new Management.Dns.Models.PtrRecord
+            {
+                Ptrdname = this.Ptrdname,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Represents a DNS record of type CAA that is part of a <see cref="DnsRecordSet"/>.
+    /// </summary>
+    public class CaaRecord : DnsRecordBase
+    {
+        /// <summary>
+        /// Gets or sets the flags field for this record.
+        /// </summary>
+        public byte Flags { get; set; }
+
+        /// <summary>
+        /// Gets or sets the property tag for this record.
+        /// </summary>
+        public string Tag { get; set; }
+
+        /// <summary>
+        /// Gets or sets the property value for this record.
+        /// </summary>
+        public string Value { get; set; }
+
+        public override string ToString()
+        {
+            return $"[{Flags},{Tag},{Value}]";
+        }
+
+        public override object Clone()
+        {
+            return new CaaRecord()
+            {
+                Flags = this.Flags,
+                Tag = this.Tag,
+                Value = this.Value
+            };
+        }
+
+        internal override object ToMamlRecord()
+        {
+            return new Management.Dns.Models.CaaRecord(
+                this.Flags,
+                this.Tag,
+                this.Value);
+        }
+    }
+
 }

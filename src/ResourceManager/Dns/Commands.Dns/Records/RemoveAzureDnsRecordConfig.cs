@@ -12,12 +12,10 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections;
-using System.Management.Automation;
 using Microsoft.Azure.Commands.Dns.Models;
 using Microsoft.Azure.Management.Dns.Models;
 using System;
-
+using System.Management.Automation;
 using ProjectResources = Microsoft.Azure.Commands.Dns.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.Dns
@@ -25,9 +23,11 @@ namespace Microsoft.Azure.Commands.Dns
     /// <summary>
     /// Removes a record from a record set object.
     /// </summary>
-    [Cmdlet(VerbsCommon.Remove, "AzureDnsRecordConfig"), OutputType(typeof(DnsRecordSet))]
+    [Cmdlet(VerbsCommon.Remove, "AzureRmDnsRecordConfig"), OutputType(typeof(DnsRecordSet))]
     public class RemoveAzureDnsRecordConfig : DnsBaseCmdlet
     {
+        private const string ParameterSetCaa = "Caa";
+
         [Parameter(Mandatory = true, ValueFromPipeline = true, HelpMessage = "The record set from which to remove the record.")]
         [ValidateNotNullOrEmpty]
         public DnsRecordSet RecordSet { get; set; }
@@ -79,6 +79,20 @@ namespace Microsoft.Azure.Commands.Dns
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The canonical name of the CNAME record to remove. Must not be relative to the name of the zone. Must not have a terminating dot", ParameterSetName = "CNAME")]
         [ValidateNotNullOrEmpty]
         public string Cname { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The flags for the CAA record to add. Must be a number between 0 and 255.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNullOrEmpty]
+        public byte CaaFlags { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The tag field of the CAA record to add.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNullOrEmpty]
+        public string CaaTag { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The value field for the CAA record to add.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNull]
+        [AllowEmptyString]
+        [ValidateLength(DnsRecordBase.CaaRecordMinLength, DnsRecordBase.CaaRecordMaxLength)]
+        public string CaaValue { get; set; }
 
         public override void ExecuteCmdlet()
         {
@@ -143,11 +157,28 @@ namespace Microsoft.Azure.Commands.Dns
                                 && ((TxtRecord)record).Value == this.Value);
                             break;
                         }
+                    case RecordType.PTR:
+                        {
+                            removedCount = result.Records.RemoveAll(record =>
+                                record is PtrRecord
+                                && ((PtrRecord)record).Ptrdname == this.Ptrdname);
+                            break;
+                        }
                     case RecordType.CNAME:
                         {
                             removedCount = result.Records.RemoveAll(record =>
                                 record is CnameRecord
                                 && string.Equals(((CnameRecord)record).Cname, this.Cname, System.StringComparison.OrdinalIgnoreCase));
+                            break;
+                        }
+                    case RecordType.CAA:
+                        {
+                            // CAAValue is considered binary. So, not doing a case-insensitive search
+                            removedCount = result.Records.RemoveAll(record =>
+                                record is CaaRecord
+                                && string.Equals(((CaaRecord)record).Tag, this.CaaTag, System.StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(((CaaRecord)record).Value, this.CaaValue)
+                                && ((CaaRecord)record).Flags == this.CaaFlags);
                             break;
                         }
                 }

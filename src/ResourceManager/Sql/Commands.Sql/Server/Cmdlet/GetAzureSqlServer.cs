@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,18 +12,35 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections.Generic;
-using System.Management.Automation;
+using Microsoft.Azure.Commands.Common.Authentication;
+using Microsoft.Azure.Commands.Common.Authentication.Abstractions;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using Microsoft.Azure.Commands.Sql.Server.Model;
+using Microsoft.WindowsAzure.Commands.Common;
+using System.Collections.Generic;
+using System.IO;
+using System.Management.Automation;
+using System.Reflection;
 
 namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
 {
     /// <summary>
-    /// Defines the Get-AzureSqlServer cmdlet
+    /// Defines the Get-AzureRmSqlServer cmdlet
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureSqlServer", ConfirmImpact = ConfirmImpact.None)]
+    [Cmdlet(VerbsCommon.Get, "AzureRmSqlServer", ConfirmImpact = ConfirmImpact.None, SupportsShouldProcess = true)]
     public class GetAzureSqlServer : AzureSqlServerCmdletBase
     {
+        /// <summary>
+        /// Gets or sets the name of the resource group to use.
+        /// </summary>
+        [Parameter(Mandatory = false,
+            ValueFromPipelineByPropertyName = true,
+            Position = 0,
+            HelpMessage = "The name of the resource group.")]
+        [ResourceGroupCompleter]
+        [ValidateNotNullOrEmpty]
+        public override string ResourceGroupName { get; set; }
+
         /// <summary>
         /// Gets or sets the name of the database server to use.
         /// </summary>
@@ -31,9 +48,10 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
             ValueFromPipelineByPropertyName = true,
             Position = 1,
             HelpMessage = "SQL Database server name.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string ServerName { get; set; }
-
+        
         /// <summary>
         /// Gets a server from the service.
         /// </summary>
@@ -41,15 +59,23 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
         protected override IEnumerable<AzureSqlServerModel> GetEntity()
         {
             ICollection<AzureSqlServerModel> results = null;
-            
-            if (this.MyInvocation.BoundParameters.ContainsKey("ServerName"))
+
+            if (MyInvocation.BoundParameters.ContainsKey("ServerName") && MyInvocation.BoundParameters.ContainsKey("ResourceGroupName"))
             {
                 results = new List<AzureSqlServerModel>();
                 results.Add(ModelAdapter.GetServer(this.ResourceGroupName, this.ServerName));
             }
+            else if (MyInvocation.BoundParameters.ContainsKey("ResourceGroupName"))
+            {
+                results = ModelAdapter.ListServersByResourceGroup(this.ResourceGroupName);
+            }
+            else if (!MyInvocation.BoundParameters.ContainsKey("ServerName"))
+            {
+                results = ModelAdapter.ListServers();
+            }
             else
             {
-                results = ModelAdapter.GetServers(this.ResourceGroupName);
+                throw new PSArgumentException("When specifying the serverName parameter the ResourceGroup parameter must also be used");
             }
 
             return results;

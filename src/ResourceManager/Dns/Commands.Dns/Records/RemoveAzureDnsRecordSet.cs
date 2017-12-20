@@ -12,11 +12,11 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections;
-using System.Management.Automation;
 using Microsoft.Azure.Commands.Dns.Models;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using Microsoft.Azure.Management.Dns.Models;
-
+using System;
+using System.Management.Automation;
 using ProjectResources = Microsoft.Azure.Commands.Dns.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.Dns
@@ -24,7 +24,8 @@ namespace Microsoft.Azure.Commands.Dns
     /// <summary>
     /// Deletes an existing record set.
     /// </summary>
-    [Cmdlet(VerbsCommon.Remove, "AzureDnsRecordSet"), OutputType(typeof(bool))]
+    [Cmdlet(VerbsCommon.Remove, "AzureRmDnsRecordSet", SupportsShouldProcess = true),
+        OutputType(typeof(bool))]
     public class RemoveAzureDnsRecordSet : DnsBaseCmdlet
     {
         [Parameter(Mandatory = true, ParameterSetName = "Fields", HelpMessage = "The name of the records in the record set (relative to the name of the zone and without a terminating dot).")]
@@ -42,6 +43,7 @@ namespace Microsoft.Azure.Commands.Dns
         public string ZoneName { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group to which the zone belongs.", ParameterSetName = "Fields")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -57,6 +59,7 @@ namespace Microsoft.Azure.Commands.Dns
         public SwitchParameter Overwrite { get; set; }
 
         [Parameter(Mandatory = false, HelpMessage = "Do not ask for confirmation.")]
+        [Obsolete("This parameter is obsolete; use Confirm instead")]
         public SwitchParameter Force { get; set; }
 
         [Parameter(Mandatory = false)]
@@ -79,7 +82,7 @@ namespace Microsoft.Azure.Commands.Dns
                 {
                     Name = this.Name,
                     Etag = null,
-                    RecordType = this.RecordType,                   
+                    RecordType = this.RecordType,
                     ResourceGroupName = this.ResourceGroupName,
                     ZoneName = this.ZoneName,
                 };
@@ -120,22 +123,22 @@ namespace Microsoft.Azure.Commands.Dns
             bool overwrite = this.Overwrite.IsPresent || this.ParameterSetName != "Object";
 
             ConfirmAction(
-                Force.IsPresent,
-                string.Format(ProjectResources.Confirm_RemoveRecordSet, recordSetToDelete.Name, recordSetToDelete.ZoneName),
                 ProjectResources.Progress_RemovingRecordSet,
                 this.Name,
-                () => { deleted = DnsClient.DeleteDnsRecordSet(recordSetToDelete, overwrite); });
+                () =>
+                {
+                    deleted = DnsClient.DeleteDnsRecordSet(recordSetToDelete, overwrite);
+                    if (deleted)
+                    {
+                        WriteVerbose(ProjectResources.Success);
+                        WriteVerbose(ProjectResources.Success_RemoveRecordSet);
+                    }
 
-            if (deleted)
-            {
-                WriteVerbose(ProjectResources.Success);
-                WriteVerbose(ProjectResources.Success_RemoveRecordSet);
-            }
-
-            if (this.PassThru)
-            {
-                WriteObject(deleted);
-            }
+                    if (this.PassThru)
+                    {
+                        WriteObject(deleted);
+                    }
+                });
         }
     }
 }

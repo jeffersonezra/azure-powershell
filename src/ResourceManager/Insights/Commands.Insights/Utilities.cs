@@ -12,11 +12,18 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using System;
+using System.Management.Automation;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using Microsoft.Azure.Commands.Insights.OutputClasses;
+using Microsoft.Azure.Management.Monitor.Models;
 
 namespace Microsoft.Azure.Commands.Insights
 {
+    using System.Linq;
+
     /// <summary>
     /// Static class contaning common functions
     /// </summary>
@@ -42,6 +49,32 @@ namespace Microsoft.Azure.Commands.Insights
         {
             const string fileVersionTemplate = "This {0} was created from Powershell version: {1}";
             return string.Format(CultureInfo.InvariantCulture, fileVersionTemplate, artifactName, GetCurrentDllFileVersion() ?? "Unknown");
+        }
+
+        /// <summary>
+        /// Checks if the given string represents a valid uri
+        /// </summary>
+        /// <param name="uri">The string representing a uri</param>
+        /// <param name="argName">The name of the argument to report as invalid</param>
+        public static void ValidateUri(string uri, string argName = "Uri")
+        {
+            Uri tempUri;
+            if (!Uri.TryCreate(uri, UriKind.RelativeOrAbsolute, out tempUri))
+            {
+                throw new ArgumentException(string.Format("Invalid {0}: {1}", argName, uri));
+            }
+        }
+
+        public static void ExtractCollectionFromResult(this IEnumerator<EventData> enumerator, bool fullDetails, List<PSEventData> records, Func<EventData, bool> keepTheRecord)
+        {
+            while (enumerator.MoveNext())
+            {
+                var current = enumerator.Current;
+                if (keepTheRecord(current))
+                {
+                    records.Add(fullDetails ? new PSEventData(current) : new PSEventDataNoDetails(current));
+                }
+            }
         }
     }
 }

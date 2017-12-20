@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,26 +12,30 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
+using Microsoft.Azure.Commands.Sql.Common;
+using Microsoft.Rest.Azure;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using Hyak.Common;
-using Microsoft.Azure.Commands.Sql.Properties;
 
 namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
 {
     /// <summary>
-    /// Defines the Get-AzureSqlServer cmdlet
+    /// Defines the Get-AzureRmSqlServer cmdlet
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureSqlServer",
-        ConfirmImpact = ConfirmImpact.Low)]
+    [Cmdlet(VerbsCommon.New, "AzureRmSqlServer",
+        ConfirmImpact = ConfirmImpact.Low, SupportsShouldProcess = true)]
     public class NewAzureSqlServer : AzureSqlServerCmdletBase
     {
         /// <summary>
         /// Gets or sets the name of the database server to use.
         /// </summary>
-        [Parameter(Mandatory = true, 
+        [Parameter(Mandatory = true,
             HelpMessage = "SQL Database server name.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string ServerName { get; set; }
 
@@ -48,6 +52,7 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
         /// </summary>
         [Parameter(Mandatory = true,
             HelpMessage = "The location in which to create the server")]
+        [LocationCompleter("Microsoft.Sql/servers")]
         [ValidateNotNullOrEmpty]
         public string Location { get; set; }
 
@@ -56,15 +61,28 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
         /// </summary>
         [Parameter(Mandatory = false,
             HelpMessage = "The tags to associate with the Azure Sql Server")]
-        public Dictionary<string, string> Tags { get; set; }
+        [Alias("Tag")]
+        public Hashtable Tags { get; set; }
 
         /// <summary>
         /// Gets or sets the server version
         /// </summary>
-        [Parameter(Mandatory = false, 
+        [Parameter(Mandatory = false,
             HelpMessage = "Determines which version of Sql Azure Server is created")]
         [ValidateNotNullOrEmpty]
         public string ServerVersion { get; set; }
+
+        [Parameter(Mandatory = false,
+            HelpMessage = "Generate and assign an Azure Active Directory Identity for this server for use with key management services like Azure KeyVault.")]
+        public SwitchParameter AssignIdentity { get; set; }
+
+        /// <summary>
+        /// Overriding to add warning message
+        /// </summary>
+        public override void ExecuteCmdlet()
+        {
+            base.ExecuteCmdlet();
+        }
 
         /// <summary>
         /// Check to see if the server already exists in this resource group.
@@ -76,9 +94,9 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
             {
                 ModelAdapter.GetServer(this.ResourceGroupName, this.ServerName);
             }
-            catch(CloudException ex)
+            catch (CloudException ex)
             {
-                if(ex.Response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                if (ex.Response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     // This is what we want.  We looked and there is no server with this name.
                     return null;
@@ -90,7 +108,7 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
 
             // The server already exists
             throw new PSArgumentException(
-                string.Format(Resources.ServerNameExists, this.ServerName),
+                string.Format(Microsoft.Azure.Commands.Sql.Properties.Resources.ServerNameExists, this.ServerName),
                 "ServerName");
         }
 
@@ -103,15 +121,16 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
         {
             List<Model.AzureSqlServerModel> newEntity = new List<Model.AzureSqlServerModel>();
             newEntity.Add(new Model.AzureSqlServerModel()
-                {
-                    Location = this.Location,
-                    ResourceGroupName = this.ResourceGroupName,
-                    ServerName = this.ServerName,
-                    ServerVersion = this.ServerVersion,
-                    SqlAdministratorPassword = this.SqlAdministratorCredentials.Password,
-                    SqlAdministratorLogin = this.SqlAdministratorCredentials.UserName,
-                    Tags = this.Tags
-                });
+            {
+                Location = this.Location,
+                ResourceGroupName = this.ResourceGroupName,
+                ServerName = this.ServerName,
+                ServerVersion = this.ServerVersion,
+                SqlAdministratorPassword = this.SqlAdministratorCredentials.Password,
+                SqlAdministratorLogin = this.SqlAdministratorCredentials.UserName,
+                Tags = TagsConversionHelper.CreateTagDictionary(Tags, validate: true),
+                Identity = ResourceIdentityHelper.GetIdentityObjectFromType(this.AssignIdentity.IsPresent),
+            });
             return newEntity;
         }
 
@@ -122,8 +141,8 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
         /// <returns>The created server</returns>
         protected override IEnumerable<Model.AzureSqlServerModel> PersistChanges(IEnumerable<Model.AzureSqlServerModel> entity)
         {
-            return new List<Model.AzureSqlServerModel>() { 
-                ModelAdapter.UpsertServer(entity.First()) 
+            return new List<Model.AzureSqlServerModel>() {
+                ModelAdapter.UpsertServer(entity.First())
             };
         }
     }

@@ -12,16 +12,12 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections;
 using Microsoft.Azure.Commands.Automation.Common;
-using Microsoft.Azure.Commands.Automation.Properties;
 using System;
-using System.Collections.Generic;
+using System.Collections;
 
 namespace Microsoft.Azure.Commands.Automation.Model
 {
-    using System.Linq;
-
     public class Webhook
     {
         /// <summary>
@@ -65,9 +61,15 @@ namespace Microsoft.Azure.Commands.Automation.Model
             }
 
             this.LastModifiedTime = webhook.Properties.LastModifiedTime.ToLocalTime();
-            this.Parameters = new Hashtable(webhook.Properties.Parameters.ToDictionary(kvp => kvp.Key, kvp => kvp.Value));
+            this.Parameters = new Hashtable(StringComparer.InvariantCultureIgnoreCase);
+            foreach (var kvp in webhook.Properties.Parameters)
+            {
+                this.Parameters.Add(kvp.Key, (object)PowerShellJsonConverter.Deserialize(kvp.Value));
+            }
+
             this.RunbookName = webhook.Properties.Runbook.Name;
             this.WebhookURI = webhookUri;
+            this.HybridWorker = webhook.Properties.RunOn;
         }
 
         public string ResourceGroupName { get; set; }
@@ -93,5 +95,10 @@ namespace Microsoft.Azure.Commands.Automation.Model
         public string RunbookName { get; set; }
 
         public string WebhookURI { get; set; }
+
+        /// <summary>
+        /// Gets or sets the HybridWorker.
+        /// </summary>
+        public string HybridWorker { get; set; }
     }
 }

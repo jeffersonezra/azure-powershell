@@ -12,19 +12,18 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Automation.Common;
+using Microsoft.Azure.Commands.Automation.Model;
 using System.Collections.Generic;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.Automation.Common;
-using Microsoft.Azure.Commands.Automation.Model;
-using Microsoft.WindowsAzure.Commands.Utilities.Common;
 
 namespace Microsoft.Azure.Commands.Automation.Cmdlet
 {
     /// <summary>
     /// Gets azure automation configurations for a given account.
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureAutomationDscConfiguration", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
+    [Cmdlet(VerbsCommon.Get, "AzureRmAutomationDscConfiguration", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
     [OutputType(typeof(DscConfiguration))]
     public class GetAzureAutomationDscConfiguration : AzureAutomationBaseCmdlet
     {
@@ -45,17 +44,27 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
             IEnumerable<DscConfiguration> ret = null;
             if (this.ParameterSetName == AutomationCmdletParameterSets.ByConfigurationName)
             {
-                ret = new List<DscConfiguration> 
-                { 
+                ret = new List<DscConfiguration>
+                {
                    this.AutomationClient.GetConfiguration(this.ResourceGroupName, this.AutomationAccountName, this.Name)
                 };
+
+                this.GenerateCmdletOutput(ret);
             }
             else if (this.ParameterSetName == AutomationCmdletParameterSets.ByAll)
             {
-                ret = this.AutomationClient.ListDscConfigurations(this.ResourceGroupName, this.AutomationAccountName);
-            }
+                var nextLink = string.Empty;
 
-            this.GenerateCmdletOutput(ret);
+                do
+                {
+                    ret = this.AutomationClient.ListDscConfigurations(this.ResourceGroupName, this.AutomationAccountName, ref nextLink);
+                    if (ret != null)
+                    {
+                        this.GenerateCmdletOutput(ret);
+                    }
+
+                } while (!string.IsNullOrEmpty(nextLink));
+            }
         }
     }
 }

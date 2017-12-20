@@ -12,11 +12,12 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Management.Automation;
 using Microsoft.Azure.Commands.Compute.Common;
 using Microsoft.Azure.Commands.Compute.Models;
-using Microsoft.WindowsAzure.Commands.Utilities.Common;
 using Microsoft.Azure.Management.Compute.Models;
+using System;
+using System.Collections;
+using System.Management.Automation;
 
 namespace Microsoft.Azure.Commands.Compute
 {
@@ -25,7 +26,7 @@ namespace Microsoft.Azure.Commands.Compute
         ProfileNouns.VirtualMachineConfig),
     OutputType(
         typeof(PSVirtualMachine))]
-    public class NewAzureVMConfigCommand : AzurePSCmdlet
+    public class NewAzureVMConfigCommand : Microsoft.Azure.Commands.ResourceManager.Common.AzureRMCmdlet
     {
         [Alias("ResourceName", "Name")]
         [Parameter(
@@ -51,21 +52,63 @@ namespace Microsoft.Azure.Commands.Compute
         [ValidateNotNullOrEmpty]
         public string AvailabilitySetId { get; set; }
 
+        [Parameter(
+            Position = 3,
+            ValueFromPipelineByPropertyName = false)]
+        [ValidateNotNullOrEmpty]
+        public string LicenseType { get; set; }
+
+        [Parameter(
+            Position = 4,
+            ValueFromPipelineByPropertyName = false)]
+        [ValidateNotNullOrEmpty]
+        [Obsolete("This parameter is obsolete.  Use AssignIdentity parameter instead.", false)]
+        public ResourceIdentityType? IdentityType { get; set; }
+
+        [Parameter(
+            ValueFromPipelineByPropertyName = false)]
+        [ValidateNotNullOrEmpty]
+        public SwitchParameter AssignIdentity { get; set; }
+
+        [Parameter(
+           Mandatory = false,
+           ValueFromPipelineByPropertyName = true)]
+        public string [] Zone { get; set; }
+
+        [Parameter(
+           Mandatory = false,
+           ValueFromPipelineByPropertyName = true)]
+		[Alias("Tag")]
+		public Hashtable Tags { get; set; }
+
+        protected override bool IsUsageMetricEnabled
+        {
+            get { return true; }
+        }
+
         public override void ExecuteCmdlet()
         {
             var vm = new PSVirtualMachine
             {
                 Name = this.VMName,
-                AvailabilitySetReference = string.IsNullOrEmpty(this.AvailabilitySetId) ? null : new AvailabilitySetReference
+                AvailabilitySetReference = string.IsNullOrEmpty(this.AvailabilitySetId) ? null : new SubResource
                 {
-                    ReferenceUri = this.AvailabilitySetId
-                }
+                    Id = this.AvailabilitySetId
+                },
+                LicenseType = this.LicenseType,
+                Identity = this.AssignIdentity.IsPresent ? new VirtualMachineIdentity(null, null, ResourceIdentityType.SystemAssigned) : null,
+                Tags = this.Tags != null ? this.Tags.ToDictionary() : null,
+                Zones = this.Zone,
             };
 
+            if (this.IdentityType != null)
+            {
+                vm.Identity = new VirtualMachineIdentity(null, null, ResourceIdentityType.SystemAssigned);
+            }
             if (!string.IsNullOrEmpty(this.VMSize))
             {
                 vm.HardwareProfile = new HardwareProfile();
-                vm.HardwareProfile.VirtualMachineSize = this.VMSize;
+                vm.HardwareProfile.VmSize = this.VMSize;
             }
 
             WriteObject(vm);

@@ -12,15 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Management.Automation;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using Microsoft.Azure.Commands.TrafficManager.Models;
 using Microsoft.Azure.Commands.TrafficManager.Utilities;
-
+using System.Management.Automation;
 using ProjectResources = Microsoft.Azure.Commands.TrafficManager.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.TrafficManager
 {
-    [Cmdlet(VerbsCommon.Remove, "AzureTrafficManagerProfile"), OutputType(typeof(TrafficManagerProfile))]
+    [Cmdlet(VerbsCommon.Remove, "AzureRmTrafficManagerProfile", SupportsShouldProcess = true), 
+        OutputType(typeof(bool))]
     public class RemoveAzureTrafficManagerProfile : TrafficManagerBaseCmdlet
     {
         [Parameter(Mandatory = true, HelpMessage = "The name of the profile.", ParameterSetName = "Fields")]
@@ -28,6 +29,7 @@ namespace Microsoft.Azure.Commands.TrafficManager
         public string Name { get; set; }
 
         [Parameter(Mandatory = true, HelpMessage = "The resource group to which the profile belongs.", ParameterSetName = "Fields")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -61,15 +63,17 @@ namespace Microsoft.Azure.Commands.TrafficManager
                 string.Format(ProjectResources.Confirm_RemoveProfile, profileToDelete.Name),
                 ProjectResources.Progress_RemovingProfile,
                 this.Name,
-                () => { deleted = this.TrafficManagerClient.DeleteTrafficManagerProfile(profileToDelete); });
+                () =>
+                {
+                    deleted = this.TrafficManagerClient.DeleteTrafficManagerProfile(profileToDelete);
+                    if (deleted)
+                    {
+                        this.WriteVerbose(ProjectResources.Success);
+                        this.WriteVerbose(string.Format(ProjectResources.Success_RemoveProfile, profileToDelete.Name, profileToDelete.ResourceGroupName));
+                    }
 
-            if (deleted)
-            {
-                this.WriteVerbose(ProjectResources.Success);
-                this.WriteVerbose(string.Format(ProjectResources.Success_RemoveProfile, profileToDelete.Name, profileToDelete.ResourceGroupName));
-            }
-
-            this.WriteObject(deleted);
+                    this.WriteObject(deleted);
+                });
         }
     }
 }

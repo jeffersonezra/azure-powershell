@@ -26,6 +26,7 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryRecoveryPlan", DefaultParameterSetName = ASRParameterSets.Default)]
     [OutputType(typeof(IEnumerable<ASRRecoveryPlan>))]
+
     public class GetAzureSiteRecoveryRecoveryPlan : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -51,6 +52,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 switch (this.ParameterSetName)
                 {
                     case ASRParameterSets.ByName:

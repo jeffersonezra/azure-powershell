@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +12,9 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
+using Microsoft.Azure.Commands.Sql.Common;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -20,9 +23,9 @@ using System.Security;
 namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
 {
     /// <summary>
-    /// Defines the Get-AzureSqlServer cmdlet
+    /// Defines the Get-AzureRmSqlServer cmdlet
     /// </summary>
-    [Cmdlet(VerbsCommon.Set, "AzureSqlServer", 
+    [Cmdlet(VerbsCommon.Set, "AzureRmSqlServer",
         SupportsShouldProcess = true,
         ConfirmImpact = ConfirmImpact.Medium)]
     public class SetAzureSqlServer : AzureSqlServerCmdletBase
@@ -34,6 +37,7 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
             ValueFromPipelineByPropertyName = true,
             Position = 1,
             HelpMessage = "SQL Database server name.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string ServerName { get; set; }
 
@@ -44,28 +48,40 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
             HelpMessage = "The new SQL administrator password for the server.")]
         [ValidateNotNull]
         public SecureString SqlAdministratorPassword { get; set; }
-        
+
         /// <summary>
         /// The tags to associate with the server.
         /// </summary>
         [Parameter(Mandatory = false,
             HelpMessage = "The tags to associate with the server.")]
-        [ValidateNotNull]
-        public Dictionary<string, string> Tags { get; set; }
+        [Alias("Tag")]
+        public Hashtable Tags { get; set; }
 
         /// <summary>
         /// Gets or sets the server version
         /// </summary>
-        [Parameter(Mandatory = false, 
+        [Parameter(Mandatory = false,
             HelpMessage = "Which server version to change to.")]
         [ValidateNotNullOrEmpty]
         public string ServerVersion { get; set; }
+
+        [Parameter(Mandatory = false,
+            HelpMessage = "Generate and assign an Azure Active Directory Identity for this server for use with key management services like Azure KeyVault.")]
+        public SwitchParameter AssignIdentity { get; set; }
 
         /// <summary>
         /// Defines whether it is ok to skip the requesting of rule removal confirmation
         /// </summary>
         [Parameter(HelpMessage = "Skip confirmation message for performing the action")]
         public SwitchParameter Force { get; set; }
+
+        /// <summary>
+        /// Overriding to add warning message
+        /// </summary>
+        public override void ExecuteCmdlet()
+        {
+            base.ExecuteCmdlet();
+        }
 
         /// <summary>
         /// Get the server to update
@@ -86,14 +102,15 @@ namespace Microsoft.Azure.Commands.Sql.Server.Cmdlet
             // Construct a new entity so we only send the relevant data to the server
             List<Model.AzureSqlServerModel> updateData = new List<Model.AzureSqlServerModel>();
             updateData.Add(new Model.AzureSqlServerModel()
-                {
-                    ResourceGroupName = this.ResourceGroupName,
-                    ServerName = this.ServerName,
-                    SqlAdministratorPassword = this.SqlAdministratorPassword,
-                    Tags = this.Tags,
-                    ServerVersion = this.ServerVersion,
-                    Location = model.FirstOrDefault().Location,
-                });
+            {
+                ResourceGroupName = this.ResourceGroupName,
+                ServerName = this.ServerName,
+                SqlAdministratorPassword = this.SqlAdministratorPassword,
+                Tags = TagsConversionHelper.ReadOrFetchTags(this, model.FirstOrDefault().Tags),
+                ServerVersion = this.ServerVersion,
+                Location = model.FirstOrDefault().Location,
+                Identity = model.FirstOrDefault().Identity ?? ResourceIdentityHelper.GetIdentityObjectFromType(this.AssignIdentity.IsPresent),
+            });
             return updateData;
         }
 

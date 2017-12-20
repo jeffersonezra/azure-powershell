@@ -1,4 +1,4 @@
-﻿﻿// ----------------------------------------------------------------------------------
+﻿// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,51 +12,62 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Hyak.Common;
+using Microsoft.Azure.Commands.Automation.Model;
+using Microsoft.Azure.Commands.Automation.Properties;
+using Microsoft.Azure.Management.Automation;
+using Microsoft.Azure.Management.Automation.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
-using System.Net;
-using Microsoft.Azure.Commands.Automation.Properties;
-using Microsoft.Azure.Commands.Automation.Model;
-using Microsoft.Azure.Management.Automation;
-using AutomationManagement = Microsoft.Azure.Management.Automation;
-using Microsoft.Azure.Management.Automation.Models;
-using Newtonsoft.Json;
-using Hyak.Common;
 using System.Management.Automation.Runspaces;
+using System.Net;
+using System.Text.RegularExpressions;
+using AutomationManagement = Microsoft.Azure.Management.Automation;
 using DscNode = Microsoft.Azure.Management.Automation.Models.DscNode;
 using Job = Microsoft.Azure.Management.Automation.Models.Job;
+using JobSchedule = Microsoft.Azure.Management.Automation.Models.JobSchedule;
+using Schedule = Microsoft.Azure.Commands.Automation.Model.Schedule;
 
- namespace Microsoft.Azure.Commands.Automation.Common
+namespace Microsoft.Azure.Commands.Automation.Common
 {
     public partial class AutomationClient : IAutomationClient
     {
         #region DscConfiguration Operations
-          
+
         public IEnumerable<Model.DscConfiguration> ListDscConfigurations(
             string resourceGroupName,
-            string automationAccountName)
+            string automationAccountName,
+            ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
                 Requires.Argument("ResourceGroupName", resourceGroupName).NotNull();
                 Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
 
-                return AutomationManagementClient.ContinuationTokenHandler(
-                    skipToken =>
-                    {
-                        var response = this.automationManagementClient.Configurations.List(
-                            resourceGroupName,
-                            automationAccountName);
-                        return new ResponseWithSkipToken<AutomationManagement.Models.DscConfiguration>(
-                            response,
-                            response.Configurations);
-                    }).Select(c => new Model.DscConfiguration(resourceGroupName, automationAccountName, c));
+                var dscConfigurations = new List<AutomationManagement.Models.DscConfiguration>();
+
+                DscConfigurationListResponse response;
+                if (string.IsNullOrEmpty(nextLink))
+                {
+                    response = this.automationManagementClient.Configurations.List(
+                                    resourceGroupName,
+                                    automationAccountName);
+                }
+                else
+                {
+                    response = this.automationManagementClient.Configurations.ListNext(nextLink);
+                }
+                    
+                
+                nextLink = response.NextLink;
+                return response.Configurations.Select(configuration => new Model.DscConfiguration(resourceGroupName, automationAccountName, configuration));
             }
         }
 
@@ -141,7 +152,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             string resourceGroupName,
             string automationAccountName,
             string sourcePath,
-            IDictionary tags, 
+            IDictionary tags,
             string description,
             bool? logVerbose,
             bool published,
@@ -206,22 +217,22 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                 if (tags != null) configurationTags = tags.Cast<DictionaryEntry>().ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value.ToString());
 
                 var configurationCreateParameters = new DscConfigurationCreateOrUpdateParameters()
-                                                        {
-                                                            Name = configurationName,
-                                                            Location = location,
-                                                            Tags = configurationTags,
-                                                            Properties = new DscConfigurationCreateOrUpdateProperties()
-                                                                    {
-                                                                        Description = String.IsNullOrEmpty(description) ? String.Empty : description,
-                                                                        LogVerbose = (logVerbose.HasValue) ? logVerbose.Value : false,
-                                                                        Source = new Microsoft.Azure.Management.Automation.Models.ContentSource()
-                                                                                {
-                                                                                    // only embeddedContent supported for now
-                                                                                    ContentType = Model.ContentSourceType.embeddedContent.ToString(),
-                                                                                    Value = fileContent
-                                                                                }
-                                                                    }
-                                                        };
+                {
+                    Name = configurationName,
+                    Location = location,
+                    Tags = configurationTags,
+                    Properties = new DscConfigurationCreateOrUpdateProperties()
+                    {
+                        Description = String.IsNullOrEmpty(description) ? String.Empty : description,
+                        LogVerbose = (logVerbose.HasValue) ? logVerbose.Value : false,
+                        Source = new Microsoft.Azure.Management.Automation.Models.ContentSource()
+                        {
+                            // only embeddedContent supported for now
+                            ContentType = Model.ContentSourceType.embeddedContent.ToString(),
+                            Value = fileContent
+                        }
+                    }
+                };
 
                 var configuration =
                     this.automationManagementClient.Configurations.CreateOrUpdate(
@@ -257,7 +268,73 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             return configuration;
         }
 
-    #endregion
+        public Model.DscConfiguration CreateConfiguration(
+           string resourceGroupName,
+           string automationAccountName,
+           string configrationName,
+           string nodeName)
+        {
+            string configurationContent = "Configuration #configrationName# { Node #nodeName# { } } ";
+            configurationContent = configurationContent.Replace("#configrationName#", configrationName);
+            configurationContent = configurationContent.Replace("#nodeName#", nodeName);
+
+            using (var request = new RequestSettings(this.automationManagementClient))
+            {
+
+                // location of the configuration is set to same as that of automation account
+                string location = this.GetAutomationAccount(resourceGroupName, automationAccountName).Location;
+
+                var configurationCreateParameters = new DscConfigurationCreateOrUpdateParameters()
+                {
+                    Name = configrationName,
+                    Location = location,
+                    Properties = new DscConfigurationCreateOrUpdateProperties()
+                    {
+                        Description = String.Empty,
+                        LogVerbose = false,
+                        Source = new Microsoft.Azure.Management.Automation.Models.ContentSource()
+                        {
+                            // only embeddedContent supported for now
+                            ContentType = Model.ContentSourceType.embeddedContent.ToString(),
+                            Value = configurationContent
+                        }
+                    }
+                };
+
+                var configuration =
+                    this.automationManagementClient.Configurations.CreateOrUpdate(
+                        resourceGroupName,
+                        automationAccountName,
+                        configurationCreateParameters).Configuration;
+
+                return new Model.DscConfiguration(resourceGroupName, automationAccountName, configuration);
+            }
+        }
+
+        public void DeleteConfiguration(string resourceGroupName, string automationAccountName, string name)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNull();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
+            using (var request = new RequestSettings(this.automationManagementClient))
+            {
+                try
+                {
+                    this.automationManagementClient.Configurations.Delete(resourceGroupName, automationAccountName, name);
+                }
+                catch (CloudException cloudException)
+                {
+                    if (cloudException.Response.StatusCode == HttpStatusCode.NoContent)
+                    {
+                        throw new ResourceNotFoundException(
+                            typeof(Model.DscConfiguration),
+                            string.Format(CultureInfo.CurrentCulture, Resources.ConfigurationNotFound, name));
+                    }
+                    throw;
+                }
+            }
+        }
+
+        #endregion
 
         #region DscMetaConfig Operations
         public DirectoryInfo GetDscMetaConfig(string resourceGroupName, string automationAccountName, string outputFolder, string[] computerNames, bool overwriteExistingFile)
@@ -362,14 +439,14 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             if (Directory.Exists(folderPath))
             {
                 // get the full path
-                fullPath  = Path.GetFullPath(folderPath);
+                fullPath = Path.GetFullPath(folderPath);
             }
             else
             {
                 throw new ArgumentException(
                     string.Format(CultureInfo.CurrentCulture, Resources.InvalidFolderPath, folderPath));
             }
-            
+
             return fullPath;
         }
 
@@ -388,7 +465,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             {
                 throw new UnauthorizedAccessException(
                     string.Format(CultureInfo.CurrentCulture, Resources.UnauthorizedAccess, outputFilePath));
-            }    
+            }
         }
 
         #endregion
@@ -470,7 +547,8 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             string resourceGroupName,
             string automationAccountName,
             string nodeName,
-            string status)
+            string status,
+            ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
@@ -478,36 +556,32 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                 Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
                 Requires.Argument("NodeName", nodeName).NotNull();
 
-                IEnumerable<AutomationManagement.Models.DscNode> dscNodes;
-
-                if (!String.IsNullOrEmpty(status))
+                DscNodeListResponse response;
+                if (string.IsNullOrEmpty(nextLink))
                 {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new DscNodeListParameters { Status = status, Name = nodeName });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
+                    if (!string.IsNullOrEmpty(status))
+                    {
+                        response = this.automationManagementClient.Nodes.List(
+                                    resourceGroupName,
+                                    automationAccountName,
+                                    new DscNodeListParameters { Status = status, Name = nodeName });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.Nodes.List(
+                                    resourceGroupName,
+                                    automationAccountName,
+                                    new DscNodeListParameters { Name = nodeName });
+                    }
                 }
                 else
                 {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new DscNodeListParameters { Name = nodeName });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
+                    response = this.automationManagementClient.Nodes.ListNext(nextLink);
                 }
 
-                return dscNodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
+                nextLink = response.NextLink;
+
+                return response.Nodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
             }
         }
 
@@ -515,7 +589,8 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             string resourceGroupName,
             string automationAccountName,
             string nodeConfigurationName,
-            string status)
+            string status,
+            ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
@@ -523,36 +598,35 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                 Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
                 Requires.Argument("NodeConfigurationName", nodeConfigurationName).NotNull();
 
-                IEnumerable<AutomationManagement.Models.DscNode> dscNodes;
-
-                if (!String.IsNullOrEmpty(status))
+                DscNodeListResponse response;
+                if (string.IsNullOrEmpty(nextLink))
                 {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new DscNodeListParameters { Status = status, NodeConfigurationName = nodeConfigurationName });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
+                    if (!string.IsNullOrEmpty(status))
+                    {
+                        response = this.automationManagementClient.Nodes.List(
+                                            resourceGroupName,
+                                            automationAccountName,
+                                            new DscNodeListParameters
+                                            {
+                                                Status = status,
+                                                NodeConfigurationName = nodeConfigurationName
+                                            });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.Nodes.List(
+                                            resourceGroupName,
+                                            automationAccountName,
+                                            new DscNodeListParameters { NodeConfigurationName = nodeConfigurationName });
+                    }
                 }
                 else
                 {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new DscNodeListParameters { NodeConfigurationName = nodeConfigurationName });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
+                    response = this.automationManagementClient.Nodes.ListNext(nextLink);
                 }
-
-                return dscNodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
+                nextLink = response.NextLink;
+                
+                return response.Nodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
             }
         }
 
@@ -560,7 +634,8 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             string resourceGroupName,
             string automationAccountName,
             string configurationName,
-            string status)
+            string status,
+            ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
@@ -586,7 +661,8 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                             resourceGroupName,
                             automationAccountName,
                             nodeConfiguration.Name,
-                            status);
+                            status,
+                            ref nextLink);
 
                     if (listOfNodesForGivenNodeConfiguration != null)
                     {
@@ -601,45 +677,44 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
         public IEnumerable<Model.DscNode> ListDscNodes(
             string resourceGroupName,
             string automationAccountName,
-            string status)
+            string status,
+            ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
                 Requires.Argument("ResourceGroupName", resourceGroupName).NotNull();
                 Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
 
-                IEnumerable<AutomationManagement.Models.DscNode> dscNodes;
-
-                if (!string.IsNullOrEmpty(status))
+                DscNodeListResponse response;
+                
+                if (string.IsNullOrEmpty(nextLink))
                 {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new DscNodeListParameters { Status = status });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
-                }
-                else
-                {
-                    dscNodes = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.Nodes.List(
+                    if (!string.IsNullOrEmpty(status))
+                    {
+                        response = this.automationManagementClient.Nodes.List(
+                            resourceGroupName,
+                            automationAccountName,
+                            new DscNodeListParameters { Status = status });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.Nodes.List(
                                 resourceGroupName,
                                 automationAccountName,
                                 new DscNodeListParameters { });
-
-                            return new ResponseWithSkipToken<DscNode>(response, response.Nodes);
-                        });
+                    }
+                }
+                else
+                {
+                    response = this.automationManagementClient.Nodes.ListNext(nextLink);
                 }
 
-                return dscNodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
+                nextLink = response.NextLink;
+                
+                return response.Nodes.Select(dscNode => new Model.DscNode(resourceGroupName, automationAccountName, dscNode));
             }
         }
+
 
         public Model.DscNode SetDscNodeById(
             string resourceGroupName,
@@ -683,10 +758,10 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                         resourceGroupName,
                         automationAccountName,
                         new DscNodePatchParameters
-                            {
-                                Id = nodeId,
-                                NodeConfiguration = nodeConfiguration
-                            }).Node;
+                        {
+                            NodeId = nodeId,
+                            NodeConfiguration = nodeConfiguration
+                        }).Node;
 
                 return new Model.DscNode(resourceGroupName, automationAccountName, node);
             }
@@ -714,7 +789,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
 
                 throw;
             }
-	}
+        }
 
         public void RegisterDscNode(string resourceGroupName,
                                             string automationAccountName,
@@ -751,7 +826,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                 resourceGroupName,
                 automationAccountName);
 
-            // prepare the parameters to be used in New-AzureResourceGroupDeployment cmdlet
+            // prepare the parameters to be used in New-AzureRmResourceGroupDeployment cmdlet
             Hashtable templateParameters = new Hashtable();
             templateParameters.Add("vmName", azureVMName);
             templateParameters.Add("location", location);
@@ -766,11 +841,12 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             templateParameters.Add("rebootNodeIfNeeded", rebootFlag);
             templateParameters.Add("actionAfterReboot", actionAfterReboot);
             templateParameters.Add("allowModuleOverwrite", moduleOverwriteFlag);
+            templateParameters.Add("timestamp", DateTimeOffset.UtcNow.ToString("o"));
 
-            // invoke the New-AzureResourceGroupDeployment cmdlet
+            // invoke the New-AzureRmResourceGroupDeployment cmdlet
             using (Pipeline pipe = Runspace.DefaultRunspace.CreateNestedPipeline())
             {
-                Command invokeCommand = new Command("New-AzureResourceGroupDeployment");
+                Command invokeCommand = new Command("New-AzureRmResourceGroupDeployment");
                 invokeCommand.Parameters.Add("Name", deploymentName);
                 invokeCommand.Parameters.Add("ResourceGroupName", azureVmResourceGroup);
                 invokeCommand.Parameters.Add("TemplateParameterObject", templateParameters);
@@ -816,56 +892,42 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             }
         }
 
-        public IEnumerable<Model.CompilationJob> ListCompilationJobsByConfigurationName(string resourceGroupName, string automationAccountName, string configurationName, DateTimeOffset? startTime, DateTimeOffset? endTime, string jobStatus)
+        public IEnumerable<Model.CompilationJob> ListCompilationJobsByConfigurationName(string resourceGroupName, string automationAccountName, string configurationName, DateTimeOffset? startTime, DateTimeOffset? endTime, string jobStatus, ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
-                IEnumerable<AutomationManagement.Models.DscCompilationJob> jobModels;
+                DscCompilationJobListResponse response;
 
-                if (startTime.HasValue && endTime.HasValue)
-                {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.CompilationJobs.List(
-                                    resourceGroupName,
-                                    automationAccountName,
-                                    new AutomationManagement.Models.DscCompilationJobListParameters
-                                    {
-                                        StartTime = FormatDateTime(startTime.Value),
-                                        EndTime = FormatDateTime(endTime.Value),
-                                        ConfigurationName = configurationName,
-                                        Status = jobStatus,
-                                    });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
-                }
-                else if (startTime.HasValue)
-                {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                         skipToken =>
-                         {
-                             var response =
-                                  this.automationManagementClient.CompilationJobs.List(
-                                     resourceGroupName,
-                                     automationAccountName,
-                                       new AutomationManagement.Models.DscCompilationJobListParameters
-                                       {
-                                           StartTime = FormatDateTime(startTime.Value),
-                                           ConfigurationName = configurationName,
-                                           Status = jobStatus
-                                       });
-                             return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                         });
-                }
-                else if (endTime.HasValue)
-                {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.CompilationJobs.List(
+                if(string.IsNullOrEmpty(nextLink))
+                { 
+                    if (startTime.HasValue && endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscCompilationJobListParameters
+                                        {
+                                            StartTime = FormatDateTime(startTime.Value),
+                                            EndTime = FormatDateTime(endTime.Value),
+                                            ConfigurationName = configurationName,
+                                            Status = jobStatus,
+                                        });
+                    }
+                    else if (startTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscCompilationJobListParameters
+                                        {
+                                            StartTime = FormatDateTime(startTime.Value),
+                                            ConfigurationName = configurationName,
+                                            Status = jobStatus
+                                        });
+                    }
+                    else if (endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
                                     resourceGroupName,
                                     automationAccountName,
                                     new AutomationManagement.Models.DscCompilationJobListParameters
@@ -874,106 +936,93 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                                         ConfigurationName = configurationName,
                                         Status = jobStatus,
                                     });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                    resourceGroupName,
+                                    automationAccountName,
+                                    new AutomationManagement.Models.DscCompilationJobListParameters
+                                    {
+                                        Status = jobStatus,
+                                        ConfigurationName = configurationName
+                                    });
+                    }
                 }
                 else
                 {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.CompilationJobs.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new AutomationManagement.Models.DscCompilationJobListParameters
-                                {
-                                    Status = jobStatus,
-                                    ConfigurationName = configurationName
-                                });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
+                    response = this.automationManagementClient.CompilationJobs.ListNext(nextLink);
                 }
 
-                return jobModels.Select(jobModel => new Commands.Automation.Model.CompilationJob(resourceGroupName, automationAccountName, jobModel));
+                nextLink = response.NextLink;
+
+                return response.DscCompilationJobs.Select(jobModel => new Model.CompilationJob(resourceGroupName, automationAccountName, jobModel));
             }
         }
 
-        public IEnumerable<Model.CompilationJob> ListCompilationJobs(string resourceGroupName, string automationAccountName, DateTimeOffset? startTime, DateTimeOffset? endTime, string jobStatus)
+        public IEnumerable<Model.CompilationJob> ListCompilationJobs(string resourceGroupName, string automationAccountName, DateTimeOffset? startTime, DateTimeOffset? endTime, string jobStatus, ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
-                IEnumerable<AutomationManagement.Models.DscCompilationJob> jobModels;
+                DscCompilationJobListResponse response;
 
-                if (startTime.HasValue && endTime.HasValue)
+                if (string.IsNullOrEmpty(nextLink))
                 {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.CompilationJobs.List(
+                    if (startTime.HasValue && endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscCompilationJobListParameters
+                                        {
+                                            StartTime = FormatDateTime(startTime.Value),
+                                            EndTime = FormatDateTime(endTime.Value),
+                                            Status = jobStatus,
+                                        });
+
+                    }
+                    else if (startTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                           resourceGroupName,
+                                           automationAccountName,
+                                           new AutomationManagement.Models.DscCompilationJobListParameters
+                                           {
+                                               StartTime = FormatDateTime(startTime.Value),
+                                               Status = jobStatus,
+                                           });
+                    }
+                    else if (endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscCompilationJobListParameters
+                                        {
+                                            EndTime = FormatDateTime(endTime.Value),
+                                            Status = jobStatus,
+                                        });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.CompilationJobs.List(
                                     resourceGroupName,
                                     automationAccountName,
-                                    new AutomationManagement.Models.DscCompilationJobListParameters
-                                    {
-                                        StartTime = FormatDateTime(startTime.Value),
-                                        EndTime = FormatDateTime(endTime.Value),
-                                        Status = jobStatus,
-                                    });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
-                }
-                else if (startTime.HasValue)
-                {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                         skipToken =>
-                         {
-                             var response =
-                                  this.automationManagementClient.CompilationJobs.List(
-                                       resourceGroupName,
-                                       automationAccountName,
-                                       new AutomationManagement.Models.DscCompilationJobListParameters
-                                       {
-                                           StartTime = FormatDateTime(startTime.Value),
-                                           Status = jobStatus,
-                                       });
-                             return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                         });
-                }
-                else if (endTime.HasValue)
-                {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.CompilationJobs.List(
-                                    resourceGroupName,
-                                    automationAccountName,
-                                    new AutomationManagement.Models.DscCompilationJobListParameters
-                                    {
-                                        EndTime = FormatDateTime(endTime.Value),
-                                        Status = jobStatus,
-                                    });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
+                                    new AutomationManagement.Models.DscCompilationJobListParameters { Status = jobStatus });
+                    }
                 }
                 else
                 {
-                    jobModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.CompilationJobs.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new AutomationManagement.Models.DscCompilationJobListParameters { Status = jobStatus });
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscCompilationJob>(response, response.DscCompilationJobs);
-                        });
+                    response = this.automationManagementClient.CompilationJobs.ListNext(nextLink);
                 }
 
-                return jobModels.Select(jobModel => new Model.CompilationJob(resourceGroupName, automationAccountName, jobModel));
+                nextLink = response.NextLink;
+
+                return response.DscCompilationJobs.Select(jobModel => new Model.CompilationJob(resourceGroupName, automationAccountName, jobModel));
             }
         }
 
-        public Model.CompilationJob StartCompilationJob(string resourceGroupName, string automationAccountName, string configurationName, IDictionary parameters)
+        public CompilationJob StartCompilationJob(string resourceGroupName, string automationAccountName, string configurationName, IDictionary parameters, IDictionary configurationData, bool incrementNodeConfigurationBuild)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
@@ -985,7 +1034,8 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                         {
                             Name = configurationName
                         },
-                        Parameters = this.ProcessConfigurationParameters(resourceGroupName, automationAccountName, configurationName, parameters)
+                        Parameters = this.ProcessConfigurationParameters(parameters, configurationData),
+                        IncrementNodeConfigurationBuild = incrementNodeConfigurationBuild
                     }
                 };
 
@@ -1023,6 +1073,21 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
         #endregion
 
         #region node configuration
+        public Model.NodeConfiguration TryGetNodeConfiguration(string resourceGroupName, string automationAccountName, string nodeConfigurationName, string rollupStatus)
+        {
+            using (var request = new RequestSettings(this.automationManagementClient))
+            {
+                try
+                {
+                    return GetNodeConfiguration(resourceGroupName, automationAccountName, nodeConfigurationName, rollupStatus);
+                }
+                catch (ResourceNotFoundException)
+                {
+                    return null;
+                }
+            }
+        }
+
         public Model.NodeConfiguration GetNodeConfiguration(string resourceGroupName, string automationAccountName, string nodeConfigurationName, string rollupStatus)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
@@ -1030,7 +1095,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                 try
                 {
                     var nodeConfiguration = this.automationManagementClient.NodeConfigurations.Get(resourceGroupName, automationAccountName, nodeConfigurationName).NodeConfiguration;
-                    
+
                     string computedRollupStatus = GetRollupStatus(resourceGroupName, automationAccountName, nodeConfigurationName);
 
                     if (string.IsNullOrEmpty(rollupStatus) || (rollupStatus != null && computedRollupStatus.Equals(rollupStatus)))
@@ -1052,30 +1117,33 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             }
         }
 
-        public IEnumerable<Model.NodeConfiguration> ListNodeConfigurationsByConfigurationName(string resourceGroupName, string automationAccountName, string configurationName, string rollupStatus)
+        public IEnumerable<Model.NodeConfiguration> ListNodeConfigurationsByConfigurationName(string resourceGroupName, string automationAccountName, string configurationName, string rollupStatus, ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
-                IEnumerable<AutomationManagement.Models.DscNodeConfiguration> nodeConfigModels;
+                DscNodeConfigurationListResponse response;
+                if (string.IsNullOrEmpty(nextLink))
+                {
+                    response = this.automationManagementClient.NodeConfigurations.List(
+                                       resourceGroupName,
+                                       automationAccountName,
+                                       new AutomationManagement.Models.DscNodeConfigurationListParameters
+                                       {
+                                           ConfigurationName = configurationName
+                                       });
+                }
+                else
+                {
+                    response = this.automationManagementClient.NodeConfigurations.ListNext(nextLink);
+                }
 
-                nodeConfigModels = AutomationManagementClient.ContinuationTokenHandler(
-                    skipToken =>
-                    {
-                        var response = this.automationManagementClient.NodeConfigurations.List(
-                            resourceGroupName,
-                            automationAccountName,
-                            new AutomationManagement.Models.DscNodeConfigurationListParameters
-                            {
-                                ConfigurationName = configurationName
-                            });
-                        return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeConfiguration>(response, response.DscNodeConfigurations);
-                    });
+                nextLink = response.NextLink;
 
                 var nodeConfigurations = new List<Model.NodeConfiguration>();
-                foreach (var nodeConfiguration in nodeConfigModels)
+                foreach (var nodeConfiguration in response.DscNodeConfigurations)
                 {
                     string computedRollupStatus = GetRollupStatus(resourceGroupName, automationAccountName, nodeConfiguration.Name);
-                    
+
                     if (string.IsNullOrEmpty(rollupStatus) || (rollupStatus != null && computedRollupStatus.Equals(rollupStatus)))
                     {
                         nodeConfigurations.Add(new Model.NodeConfiguration(resourceGroupName, automationAccountName, nodeConfiguration, computedRollupStatus));
@@ -1086,27 +1154,29 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             }
         }
 
-        public IEnumerable<Model.NodeConfiguration> ListNodeConfigurations(string resourceGroupName, string automationAccountName, string rollupStatus)
+        public IEnumerable<Model.NodeConfiguration> ListNodeConfigurations(string resourceGroupName, string automationAccountName, string rollupStatus, ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
-                IEnumerable<AutomationManagement.Models.DscNodeConfiguration> nodeConfigModels;
+                DscNodeConfigurationListResponse response;
+                if (string.IsNullOrEmpty(nextLink))
+                {
+                    response = this.automationManagementClient.NodeConfigurations.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscNodeConfigurationListParameters());
+                }
+                else
+                {
+                    response = this.automationManagementClient.NodeConfigurations.ListNext(nextLink);
+                }
 
-                nodeConfigModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response = this.automationManagementClient.NodeConfigurations.List(
-                                resourceGroupName,
-                                automationAccountName,
-                                new AutomationManagement.Models.DscNodeConfigurationListParameters());
-
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeConfiguration>(response, response.DscNodeConfigurations);
-                        });
+                nextLink = response.NextLink;
 
                 var nodeConfigurations = new List<Model.NodeConfiguration>();
-                foreach (var nodeConfiguration in nodeConfigModels)
+                foreach (var nodeConfiguration in response.DscNodeConfigurations)
                 {
-                    string computedRollupStatus = GetRollupStatus(resourceGroupName, automationAccountName, nodeConfiguration.Name);
+                    string computedRollupStatus = GetRollupStatus(resourceGroupName, automationAccountName, nodeConfiguration.Configuration.Name);
 
                     if (string.IsNullOrEmpty(rollupStatus) || (rollupStatus != null && computedRollupStatus.Equals(rollupStatus)))
                     {
@@ -1116,6 +1186,305 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
 
                 return nodeConfigurations.AsEnumerable<Model.NodeConfiguration>();
             }
+        }
+
+        public Model.NodeConfiguration CreateNodeConfiguration(
+            string resourceGroupName,
+            string automationAccountName,
+            string sourcePath,
+            string configurationName,
+            bool incrementNodeConfigurationBuild,
+            bool overWrite)
+        {
+            using (var request = new RequestSettings(this.automationManagementClient))
+            {
+                Requires.Argument("ResourceGroupName", resourceGroupName).NotNullOrEmpty();
+                Requires.Argument("AutomationAccountName", automationAccountName).NotNullOrEmpty();
+                Requires.Argument("SourcePath", sourcePath).NotNullOrEmpty();
+                Requires.Argument("configurationName", configurationName).NotNullOrEmpty();
+
+                string fileContent = null;
+                string nodeConfigurationName = null;
+                string nodeName = null;
+
+                if (File.Exists(Path.GetFullPath(sourcePath)))
+                {
+                    fileContent = System.IO.File.ReadAllText(sourcePath);
+                    nodeName = System.IO.Path.GetFileNameWithoutExtension(sourcePath);
+                    nodeConfigurationName = configurationName + "." + nodeName;
+                }
+                else
+                {
+                    // file path not valid.
+                    throw new FileNotFoundException(
+                                        string.Format(
+                                            CultureInfo.CurrentCulture,
+                                            Resources.ConfigurationSourcePathInvalid));
+                }
+
+                // if configuration already exists, ensure overwrite flag is specified
+                var configurationModel = this.TryGetConfigurationModel(
+                    resourceGroupName,
+                    automationAccountName,
+                    configurationName);
+                if (configurationModel == null)
+                {
+                    //create empty configuration if its empty
+                    this.CreateConfiguration(resourceGroupName, automationAccountName, configurationName, nodeName);
+                }
+
+                var nodeConfigurationCreateParameters = new DscNodeConfigurationCreateOrUpdateParameters()
+                {
+                    Name = nodeConfigurationName,
+                    Source = new Microsoft.Azure.Management.Automation.Models.ContentSource()
+                    {
+                        // only embeddedContent supported for now
+                        ContentType = Model.ContentSourceType.embeddedContent.ToString(),
+                        Value = fileContent
+                    },
+                    Configuration = new DscConfigurationAssociationProperty()
+                    {
+                        Name = configurationName
+                    }
+                };
+                nodeConfigurationCreateParameters.IncrementNodeConfigurationBuild = incrementNodeConfigurationBuild;
+
+                var nodeConfiguration =
+                    this.automationManagementClient.NodeConfigurations.CreateOrUpdate(
+                        resourceGroupName,
+                        automationAccountName,
+                        nodeConfigurationCreateParameters).NodeConfiguration;
+
+
+                return new Model.NodeConfiguration(resourceGroupName, automationAccountName, nodeConfiguration, null);
+            }
+        }
+
+        public void DeleteNodeConfiguration(string resourceGroupName, string automationAccountName, string name, bool ignoreNodeMappings)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNull();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNull();
+            Requires.Argument("NodeConfigurationName", name).NotNull();
+
+            using (var request = new RequestSettings(this.automationManagementClient))
+            {
+                try
+                {
+                    if (ignoreNodeMappings)
+                    {
+                        this.automationManagementClient.NodeConfigurations.Delete(resourceGroupName, automationAccountName, name);
+                    }
+                    else
+                    {
+                        var nextLink = string.Empty;
+                        List<Model.DscNode> nodeList = new List<Model.DscNode>();
+                        do
+                        {
+                            nodeList.AddRange(this.ListDscNodesByNodeConfiguration(resourceGroupName, automationAccountName, name, null, ref nextLink));
+                        } while (!string.IsNullOrEmpty(nextLink));
+                        
+                        if (nodeList.Any())
+                        {
+                            throw new ResourceCommonException(
+                                typeof(Model.NodeConfiguration),
+                                string.Format(CultureInfo.CurrentCulture, Resources.CannotDeleteNodeConfiguration, name));
+                        }
+                        else
+                        {
+                            this.automationManagementClient.NodeConfigurations.Delete(resourceGroupName, automationAccountName, name);
+                        }
+                    }
+                }
+                catch (CloudException cloudException)
+                {
+                    if (cloudException.Response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        throw new ResourceNotFoundException(
+                            typeof(Model.NodeConfiguration),
+                            string.Format(CultureInfo.CurrentCulture, Resources.NodeConfigurationNotFound, name));
+                    }
+                    throw;
+                }
+            }
+        }
+
+        public NodeConfigurationDeployment StartNodeConfigurationDeployment(string resourceGroupName, string automationAccountName, 
+            string nodeConfiguraionName, string[][] nodeNames, Schedule schedule)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNullOrEmpty();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNullOrEmpty().ValidAutomationAccountName();
+            Requires.Argument("NodeConfiguraionName", nodeConfiguraionName).NotNullOrEmpty().ValidNodeConfigurationName();
+
+            const string runbookName = "Deploy-NodeConfigurationToAutomationDscNodesV1";
+
+            IDictionary<string, string> processedParameters =
+                    this.ProcessRunbookParameters(BuildParametersForNodeConfigurationDeploymentRunbook(),
+                        ProcessParametersFornodeConfigurationRunbook(resourceGroupName, automationAccountName,
+                            nodeConfiguraionName, nodeNames));
+
+            JobSchedule jobSchedule = null;
+            Job job = null;
+
+            if (schedule == null)
+            {
+                job = this.automationManagementClient.Jobs.Create(
+                    resourceGroupName,
+                    automationAccountName,
+                    new JobCreateParameters
+                    {
+                        Properties = new JobCreateProperties
+                        {
+                            Runbook = new RunbookAssociationProperty
+                            {
+                                Name = runbookName
+                            },
+                            Parameters = processedParameters ?? null
+                        }
+                    }).Job;
+            }
+            else
+            {
+                jobSchedule = this.automationManagementClient.JobSchedules.Create(
+                    resourceGroupName,
+                    automationAccountName,
+                    new JobScheduleCreateParameters
+                    {
+                        Properties = new JobScheduleCreateProperties
+                        {
+                            Schedule = new ScheduleAssociationProperty {Name = schedule.Name},
+                            Runbook = new RunbookAssociationProperty {Name = runbookName},
+                            Parameters = processedParameters ?? null
+                        }
+                    }).JobSchedule;
+            }
+
+            return new NodeConfigurationDeployment(resourceGroupName, automationAccountName, nodeConfiguraionName, job, jobSchedule);
+        }
+
+        public NodeConfigurationDeployment GetNodeConfigurationDeployment(string resourceGroupName, string automationAccountName, Guid jobId)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNullOrEmpty();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNullOrEmpty().ValidAutomationAccountName();
+
+            var nodeLists = new List<IList<string>>();
+            var nodesStatus = new List<IDictionary<string, string>>();
+            Job job = null;
+            string nodeConfigurationName = null;
+
+            if (jobId != Guid.Empty)
+            {
+                job = this.automationManagementClient.Jobs.Get(resourceGroupName, automationAccountName, jobId).Job;
+
+                nodeConfigurationName = PowerShellJsonConverter
+                    .Deserialize(job.Properties.Parameters["NodeConfigurationName"]).ToString();
+
+                // Fetch Nodes from the Param List.
+                var nodesJsonArray = PowerShellJsonConverter.Serialize(job.Properties.Parameters["ListOfNodeNames"]);
+                var stringArray =
+                    Newtonsoft.Json.Linq.JArray.Parse(JsonConvert.DeserializeObject<string>(nodesJsonArray));
+
+                nodeLists.AddRange(stringArray.Select(jt => jt.Select(node => node.ToString()).ToList()));
+
+                // Fetch the status of each node.
+                foreach (var nodeList in nodeLists)
+                {
+                    IDictionary<string, string> dscNodeGroup = new Dictionary<string, string>();
+                    foreach (var node in nodeList)
+                    {
+                        var nextLink = string.Empty;
+                        IEnumerable<Model.DscNode> dscNodes;
+                        do
+                        {
+                            dscNodes = this.ListDscNodesByName(resourceGroupName, automationAccountName, node, null,
+                                ref nextLink);
+                        } while (!string.IsNullOrEmpty(nextLink));
+                        dscNodeGroup.Add(node, dscNodes.First().Status);
+                    }
+                    nodesStatus.Add(dscNodeGroup);
+                }
+            }
+            else
+            {
+                throw new ArgumentNullException(nameof(jobId), Resources.NoJobIdPassedToGetJobInformationCall);
+            }
+            return new NodeConfigurationDeployment(resourceGroupName, automationAccountName, nodeConfigurationName, job, nodesStatus);
+        }
+
+
+        public NodeConfigurationDeploymentSchedule GetNodeConfigurationDeploymentSchedule(string resourceGroupName, string automationAccountName, Guid jobScheduleId)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNullOrEmpty();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNullOrEmpty().ValidAutomationAccountName();
+
+            AutomationManagement.Models.JobSchedule jobSchedule = null;
+
+            if (jobScheduleId != Guid.Empty)
+            {
+                try {
+                    jobSchedule = this.automationManagementClient.JobSchedules.Get(
+                    resourceGroupName,
+                    automationAccountName,
+                    jobScheduleId).JobSchedule;
+                } catch (CloudException cloudException)
+                {
+                    if (cloudException.Response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        throw new ResourceNotFoundException(typeof(JobSchedule),
+                            string.Format(CultureInfo.CurrentCulture, Resources.JobScheduleWithIdNotFound, jobScheduleId));
+                    }
+
+                    throw;
+                }
+            }
+            return new NodeConfigurationDeploymentSchedule(resourceGroupName, automationAccountName, jobSchedule);
+        }
+
+        public IEnumerable<NodeConfigurationDeployment> ListNodeConfigurationDeployment(string resourceGroupName, string automationAccountName,
+            DateTimeOffset? startTime, DateTimeOffset? endTime, string jobStatus, ref string nextLink)
+        {
+            Requires.Argument("ResourceGroupName", resourceGroupName).NotNullOrEmpty();
+            Requires.Argument("AutomationAccountName", automationAccountName).NotNullOrEmpty().ValidAutomationAccountName();
+
+            JobListResponse response;
+            const string runbookName = "Deploy-NodeConfigurationToAutomationDscNodesV1";
+
+            if (string.IsNullOrEmpty(nextLink))
+            {
+                response = this.automationManagementClient.Jobs.List(
+                    resourceGroupName,
+                    automationAccountName,
+                    new JobListParameters
+                    {
+                        StartTime = (startTime.HasValue) ? FormatDateTime(startTime.Value) : null,
+                        EndTime = (endTime.HasValue) ? FormatDateTime(endTime.Value) : null,
+                        RunbookName = runbookName,
+                        Status = jobStatus,
+                    });
+            }
+            else
+            {
+                response = this.automationManagementClient.Jobs.ListNext(nextLink);
+            }
+
+            nextLink = response.NextLink;
+            return response.Jobs.Select(c => new NodeConfigurationDeployment(resourceGroupName, automationAccountName, null, c));
+        }
+
+        public IEnumerable<NodeConfigurationDeploymentSchedule> ListNodeConfigurationDeploymentSchedules(string resourceGroupName, string automationAccountName, ref string nextLink)
+        {
+            const string runbookName = "Deploy-NodeConfigurationToAutomationDscNodesV1";
+
+            var response = string.IsNullOrEmpty(nextLink) ? this.automationManagementClient.JobSchedules.List(resourceGroupName, automationAccountName) : this.automationManagementClient.JobSchedules.ListNext(nextLink);
+
+            nextLink = response.NextLink;
+
+            return response.JobSchedules.Where(js => string.Equals(js.Properties.Runbook.Name, runbookName, StringComparison.OrdinalIgnoreCase)).
+                Select(js => new NodeConfigurationDeploymentSchedule(resourceGroupName, automationAccountName, js));
+        }
+
+        public void StopNodeConfigurationDeployment(string resourceGroupName, string automationAccountName, Guid jobId)
+        {
+            this.StopJob(resourceGroupName, automationAccountName, jobId);
         }
 
         #endregion
@@ -1157,7 +1526,7 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
                         nodeId,
                         reportId).Content;
 
-                string outputFolderFullPath = this.GetCurrentDirectory(); 
+                string outputFolderFullPath = this.GetCurrentDirectory();
 
                 if (!string.IsNullOrEmpty(outputFolder))
                 {
@@ -1201,92 +1570,74 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             }
         }
 
-        public IEnumerable<Model.DscNodeReport> ListDscNodeReports(string resourceGroupName, string automationAccountName, Guid nodeId, DateTimeOffset? startTime, DateTimeOffset? endTime)
+        public IEnumerable<Model.DscNodeReport> ListDscNodeReports(string resourceGroupName, string automationAccountName, Guid nodeId, DateTimeOffset? startTime, DateTimeOffset? endTime, ref string nextLink)
         {
             using (var request = new RequestSettings(this.automationManagementClient))
             {
-                IEnumerable<AutomationManagement.Models.DscNodeReport> nodeReportModels;
+                DscNodeReportListResponse response;
 
-                if (startTime.HasValue && endTime.HasValue)
+                if (string.IsNullOrEmpty(nextLink))
                 {
-                    nodeReportModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.NodeReports.List(
-                                    resourceGroupName,
-                                    automationAccountName,
-                                    new AutomationManagement.Models.DscNodeReportListParameters
-                                    {
-                                        NodeId = nodeId,
-                                        StartTime = FormatDateTime(startTime.Value),
-                                        EndTime = FormatDateTime(endTime.Value)
-                                    });
-
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeReport>(response, response.NodeReports);
-                        });
-                }
-                else if (startTime.HasValue)
-                {
-                    nodeReportModels = AutomationManagementClient.ContinuationTokenHandler(
-                         skipToken =>
-                         {
-                             var response =
-                                 this.automationManagementClient.NodeReports.List(
-                                     resourceGroupName,
-                                     automationAccountName,
-                                     new AutomationManagement.Models.DscNodeReportListParameters
-                                     {
-                                         NodeId = nodeId,
-                                         StartTime = FormatDateTime(startTime.Value)
-                                     });
-
-                             return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeReport>(response, response.NodeReports);
-                         });
-                }
-                else if (endTime.HasValue)
-                {
-                    nodeReportModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.NodeReports.List(
-                                    resourceGroupName,
-                                    automationAccountName,
-                                    new AutomationManagement.Models.DscNodeReportListParameters
-                                    {
-                                        NodeId = nodeId,
-                                        EndTime = FormatDateTime(endTime.Value)
-                                    });
-
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeReport>(response, response.NodeReports);
-                        });
+                    if (startTime.HasValue && endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.NodeReports.List(
+                                        resourceGroupName,
+                                        automationAccountName,
+                                        new AutomationManagement.Models.DscNodeReportListParameters
+                                        {
+                                            NodeId = nodeId,
+                                            StartTime = FormatDateTime(startTime.Value),
+                                            EndTime = FormatDateTime(endTime.Value)
+                                        });
+                    }
+                    else if (startTime.HasValue)
+                    {
+                        response = this.automationManagementClient.NodeReports.List(
+                                         resourceGroupName,
+                                         automationAccountName,
+                                         new AutomationManagement.Models.DscNodeReportListParameters
+                                         {
+                                             NodeId = nodeId,
+                                             StartTime = FormatDateTime(startTime.Value)
+                                         });
+                    }
+                    else if (endTime.HasValue)
+                    {
+                        response = this.automationManagementClient.NodeReports.List(
+                            resourceGroupName,
+                            automationAccountName,
+                            new AutomationManagement.Models.DscNodeReportListParameters
+                            {
+                                NodeId = nodeId,
+                                EndTime = FormatDateTime(endTime.Value)
+                            });
+                    }
+                    else
+                    {
+                        response = this.automationManagementClient.NodeReports.List(
+                            resourceGroupName,
+                            automationAccountName,
+                            new AutomationManagement.Models.DscNodeReportListParameters
+                            {
+                                NodeId = nodeId
+                            });
+                    }
                 }
                 else
                 {
-                    nodeReportModels = AutomationManagementClient.ContinuationTokenHandler(
-                        skipToken =>
-                        {
-                            var response =
-                                this.automationManagementClient.NodeReports.List(
-                                    resourceGroupName,
-                                    automationAccountName,
-                                    new AutomationManagement.Models.DscNodeReportListParameters
-                                    {
-                                        NodeId = nodeId
-                                    });
-
-                            return new ResponseWithSkipToken<AutomationManagement.Models.DscNodeReport>(response, response.NodeReports);
-                        });
+                    response = this.automationManagementClient.NodeReports.ListNext(nextLink);
                 }
 
-                return nodeReportModels.Select(jobModel => new Commands.Automation.Model.DscNodeReport(resourceGroupName, automationAccountName, nodeId.ToString("D"), jobModel));
+                nextLink = response.NextLink;
+
+                return response.NodeReports.Select(report => new Commands.Automation.Model.DscNodeReport(resourceGroupName, automationAccountName, nodeId.ToString("D"), report));
             }
         }
         #endregion 
 
 
         #region privatemethods
+        
         /// <summary>
         /// Enumerate the list of NodeConfigurations for given configuration - without any rollup status
         /// </summary>
@@ -1319,7 +1670,13 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
 
         private string GetRollupStatus(string resourceGroupName, string automationAccountName, string nodeConfigurationName)
         {
-            var nodes = this.ListDscNodesByNodeConfiguration(resourceGroupName, automationAccountName, nodeConfigurationName, null);
+            var nextLink = string.Empty;
+            List<Model.DscNode> nodes = new List<Model.DscNode>();
+            do
+            {
+                nodes.AddRange(this.ListDscNodesByNodeConfiguration(resourceGroupName, automationAccountName, nodeConfigurationName, null, ref nextLink));
+            } while (!string.IsNullOrEmpty(nextLink));
+            
             foreach (var node in nodes)
             {
                 if (node.Status.Equals("Not Compliant") || node.Status.Equals("Failed") || node.Status.Equals("Unresponsive"))
@@ -1336,42 +1693,26 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             return string.Format(CultureInfo.InvariantCulture, "{0:O}", dateTime.ToUniversalTime());
         }
 
-        private IDictionary<string, string> ProcessConfigurationParameters(string resourceGroupName, string automationAccountName, string configurationName, IDictionary parameters)
+        private IDictionary<string, string> ProcessConfigurationParameters(IDictionary parameters, IDictionary configurationData)
         {
             parameters = parameters ?? new Dictionary<string, string>();
-            IEnumerable<KeyValuePair<string, DscConfigurationParameter>> configurationParameters = this.ListConfigurationParameters(resourceGroupName, automationAccountName, configurationName);
             var filteredParameters = new Dictionary<string, string>();
-
-            foreach (var configParameter in configurationParameters)
+            if (configurationData != null)
             {
-                if (parameters.Contains(configParameter.Key))
+                filteredParameters.Add("ConfigurationData", JsonConvert.SerializeObject(configurationData));
+            }
+            foreach (var key in parameters.Keys)
+            {
+                try
                 {
-                    object paramValue = parameters[configParameter.Key];
-                    try
-                    {
-                        filteredParameters.Add(configParameter.Key, paramValue.ToString());
-                    }
-                    catch (JsonSerializationException)
-                    {
-                        throw new ArgumentException(
-                        string.Format(
-                            CultureInfo.CurrentCulture, Resources.ConfigurationParameterCannotBeSerializedToJson, configParameter.Key));
-                    }
+                    filteredParameters.Add(key.ToString(), JsonConvert.SerializeObject(parameters[key]));
                 }
-                else if (configParameter.Value.IsMandatory)
+                catch (JsonSerializationException)
                 {
-                    throw new ArgumentException(
-                        string.Format(
-                            CultureInfo.CurrentCulture, Resources.ConfigurationParameterValueRequired, configParameter.Key));
+                    throw new ArgumentException(string.Format(
+                        CultureInfo.CurrentCulture, Resources.ConfigurationParameterCannotBeSerializedToJson, key.ToString()));
                 }
             }
-
-            if (filteredParameters.Count != parameters.Count)
-            {
-                throw new ArgumentException(
-                    string.Format(CultureInfo.CurrentCulture, Resources.InvalidConfigurationParameters));
-            }
-
             return filteredParameters;
         }
 
@@ -1393,6 +1734,89 @@ using Job = Microsoft.Azure.Management.Automation.Models.Job;
             Requires.Argument("automationAccountName", automationAccountName).NotNull();
             Requires.Argument("jobId", jobId).NotNull();
             return new Model.JobStream(jobStream, resourceGroupName, automationAccountName, jobId);
+        }
+
+        private IDictionary<string, object> ProcessParametersFornodeConfigurationRunbook(string resourceGroup,
+            string automationAccountName, string nodeConfigurationName, string[][] nodeNames, int waitingPeriod = 0,
+            int numberOfAttempts = 0)
+        {
+            var parameters = new Dictionary<string, object>();
+
+            try
+            {
+                parameters.Add("ResourceGroupName", resourceGroup);
+                parameters.Add("AutomationAccountName", automationAccountName);
+                parameters.Add("NodeConfigurationName", nodeConfigurationName);
+                parameters.Add("ListOfNodeNames", nodeNames);
+            }
+            catch (JsonSerializationException)
+            {
+                throw new ArgumentException(
+                    string.Format(
+                        CultureInfo.CurrentCulture, Resources.RunbookParameterCannotBeSerializedToJson, nodeNames));
+            }
+
+            if (waitingPeriod != 0)
+            {
+                parameters.Add("WaitingPeriod", waitingPeriod.ToString());
+            }
+            if (numberOfAttempts != 0)
+            {
+                parameters.Add("NumberOfTriesPerGroup", numberOfAttempts.ToString());
+            }
+
+            return parameters;
+        }
+
+        private IEnumerable<KeyValuePair<string, RunbookParameter>> BuildParametersForNodeConfigurationDeploymentRunbook
+            ()
+        {
+            var paramsForRunbook = new List<KeyValuePair<string, RunbookParameter>>
+            {
+                new KeyValuePair<string, RunbookParameter>("ResourceGroupName", new RunbookParameter
+                {
+                    IsMandatory = true,
+                    Position = 0,
+                    DefaultValue = "",
+                    Type = "System.String"
+                }),
+                new KeyValuePair<string, RunbookParameter>("AutomationAccountName", new RunbookParameter
+                {
+                    IsMandatory = true,
+                    Position = 1,
+                    DefaultValue = "",
+                    Type = "System.String"
+                }),
+                new KeyValuePair<string, RunbookParameter>("NodeConfigurationName", new RunbookParameter
+                {
+                    IsMandatory = true,
+                    Position = 2,
+                    DefaultValue = "",
+                    Type = "System.String"
+                }),
+                new KeyValuePair<string, RunbookParameter>("ListOfNodeNames", new RunbookParameter
+                {
+                    IsMandatory = true,
+                    Position = 3,
+                    Type = "System.Array"
+                }),
+                new KeyValuePair<string, RunbookParameter>("WaitingPeriod", new RunbookParameter
+                {
+                    IsMandatory = false,
+                    Position = 4,
+                    DefaultValue = "60",
+                    Type = "System.Int32"
+                }),
+                new KeyValuePair<string, RunbookParameter>("NumberOfTriesPerGroup", new RunbookParameter
+                {
+                    IsMandatory = false,
+                    Position = 5,
+                    DefaultValue = "100",
+                    Type = "System.Int32"
+                })
+            };
+
+            return paramsForRunbook;
         }
 
         #endregion

@@ -15,10 +15,11 @@
 
 namespace Microsoft.Azure.Commands.ApiManagement.Commands
 {
-    using System.Management.Automation;
     using Microsoft.Azure.Commands.ApiManagement.Models;
+    using ResourceManager.Common.ArgumentCompleters;
+    using System.Management.Automation;
 
-    [Cmdlet(VerbsData.Update, "AzureApiManagementRegion"), OutputType(typeof(PsApiManagement))]
+    [Cmdlet(VerbsData.Update, "AzureRmApiManagementRegion"), OutputType(typeof(PsApiManagement))]
     public class UpdateAzureApiManagementRegion : AzureApiManagementCmdletBase
     {
         [Parameter(
@@ -30,14 +31,10 @@ namespace Microsoft.Azure.Commands.ApiManagement.Commands
 
         [Parameter(
             ValueFromPipelineByPropertyName = true,
-            Mandatory = true, 
+            Mandatory = true,
             HelpMessage = "Location of the deployment region to update.")]
-
+        [LocationCompleter("Microsoft.ApiManagement/service")]
         [ValidateNotNullOrEmpty]
-        [ValidateSet(
-            "North Central US", "South Central US", "Central US", "West Europe", "North Europe", "West US", "East US",
-            "East US 2", "Japan East", "Japan West", "Brazil South", "Southeast Asia", "East Asia", "Australia East",
-            "Australia Southeast", IgnoreCase = false)]
         public string Location { get; set; }
 
         [Parameter(

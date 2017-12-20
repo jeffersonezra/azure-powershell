@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,9 @@ using System.Management.Automation;
 namespace Microsoft.Azure.Commands.Sql.FirewallRule.Cmdlet
 {
     /// <summary>
-    /// Defines the Get-AzureSqlServerFirewallRule cmdlet
+    /// Defines the Get-AzureRmSqlServerFirewallRule cmdlet
     /// </summary>
-    [Cmdlet(VerbsCommon.Set, "AzureSqlServerFirewallRule", ConfirmImpact = ConfirmImpact.Low)]
+    [Cmdlet(VerbsCommon.Set, "AzureRmSqlServerFirewallRule", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.Low)]
     public class SetAzureSqlServerFirewallRule : AzureSqlServerFirewallRuleCmdletBase
     {
         /// <summary>
@@ -31,6 +31,7 @@ namespace Microsoft.Azure.Commands.Sql.FirewallRule.Cmdlet
             ValueFromPipelineByPropertyName = true,
             Position = 2,
             HelpMessage = "The name of the Azure Sql Database Server Firewall Rule.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string FirewallRuleName { get; set; }
 
@@ -86,8 +87,8 @@ namespace Microsoft.Azure.Commands.Sql.FirewallRule.Cmdlet
         /// <returns>The response object from the service</returns>
         protected override IEnumerable<Model.AzureSqlServerFirewallRuleModel> PersistChanges(IEnumerable<Model.AzureSqlServerFirewallRuleModel> entity)
         {
-            return new List<Model.AzureSqlServerFirewallRuleModel>() { 
-                ModelAdapter.UpsertFirewallRule(entity.First()) 
+            return new List<Model.AzureSqlServerFirewallRuleModel>() {
+                ModelAdapter.UpsertFirewallRule(entity.First())
             };
         }
     }

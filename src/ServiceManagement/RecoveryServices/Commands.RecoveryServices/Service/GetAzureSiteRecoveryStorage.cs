@@ -26,6 +26,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "AzureSiteRecoveryStorage")]
     [OutputType(typeof(IEnumerable<ASRStorage>))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class GetAzureSiteRecoveryStorage : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -44,6 +47,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         {
             try
             {
+                this.WriteWarningWithTimestamp(
+                    string.Format(
+                        Properties.Resources.CmdletWillBeDeprecatedSoon,
+                        this.MyInvocation.MyCommand.Name));
+
                 StorageListResponse storageListResponse =
                     RecoveryServicesClient.GetAzureSiteRecoveryStorages(this.Server.ID);
 

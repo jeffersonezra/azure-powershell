@@ -30,6 +30,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsData.Import, "AzureSiteRecoveryVaultSettingsFile")]
     [OutputType(typeof(ASRVaultSettings))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class ImportAzureSiteRecoveryVaultSettingsFile : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -58,6 +61,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
             {
                 try
                 {
+                    this.WriteWarningWithTimestamp(
+                        string.Format(
+                            Properties.Resources.CmdletWillBeDeprecatedSoon,
+                            this.MyInvocation.MyCommand.Name));
+
                     var serializer = new DataContractSerializer(typeof(ASRVaultCreds));
                     using (var s = new FileStream(
                         this.Path,

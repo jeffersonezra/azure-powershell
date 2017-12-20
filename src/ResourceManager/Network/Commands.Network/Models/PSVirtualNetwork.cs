@@ -14,9 +14,9 @@
 
 namespace Microsoft.Azure.Commands.Network.Models
 {
-    using System.Collections.Generic;
-
     using Newtonsoft.Json;
+    using System.Collections.Generic;
+    using System.Management.Automation;
 
     public class PSVirtualNetwork : PSTopLevelResource
     {
@@ -24,34 +24,50 @@ namespace Microsoft.Azure.Commands.Network.Models
 
         public PSDhcpOptions DhcpOptions { get; set; }
 
-        public List<PSResourceId> NetworkInterfaces { get; set; }
-
         public List<PSSubnet> Subnets { get; set; }
 
+        public List<PSVirtualNetworkPeering> VirtualNetworkPeerings { get; set; }
+
         public string ProvisioningState { get; set; }
+
+        public bool? EnableDDoSProtection { get; set; }
+
+        public bool? EnableVmProtection { get; set; }
 
         [JsonIgnore]
         public string AddressSpaceText
         {
-            get { return JsonConvert.SerializeObject(AddressSpace, Formatting.Indented); }
+            get { return JsonConvert.SerializeObject(AddressSpace, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
         }
 
         [JsonIgnore]
         public string DhcpOptionsText
         {
-            get { return JsonConvert.SerializeObject(DhcpOptions, Formatting.Indented); }
-        }
-
-        [JsonIgnore]
-        public string NetworkInterfacesText
-        {
-            get { return JsonConvert.SerializeObject(NetworkInterfaces, Formatting.Indented); }
+            get { return JsonConvert.SerializeObject(DhcpOptions, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
         }
 
         [JsonIgnore]
         public string SubnetsText
         {
-            get { return JsonConvert.SerializeObject(Subnets, Formatting.Indented); }
+            get { return JsonConvert.SerializeObject(Subnets, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
+        }
+
+        [JsonIgnore]
+        public string VirtualNetworkPeeringsText
+        {
+            get { return JsonConvert.SerializeObject(VirtualNetworkPeerings, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
+        }
+
+        [JsonIgnore]
+        public string EnableDDoSProtectionText
+        {
+            get { return JsonConvert.SerializeObject(EnableDDoSProtection, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
+        }
+
+        [JsonIgnore]
+        public string EnableVmProtectionText
+        {
+            get { return JsonConvert.SerializeObject(EnableVmProtection, Formatting.Indented, new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore }); }
         }
     }
 }

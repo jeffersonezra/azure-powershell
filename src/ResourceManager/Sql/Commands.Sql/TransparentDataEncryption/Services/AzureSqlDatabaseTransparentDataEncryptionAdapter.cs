@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Common.Authentication.Abstractions;
+using Microsoft.Azure.Commands.Common.Authentication.Models;
+using Microsoft.Azure.Commands.Sql.ServerKeyVaultKey.Model;
+using Microsoft.Azure.Commands.Sql.Services;
+using Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Model;
+using Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Services;
+using Microsoft.Azure.Management.Sql.LegacySdk.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Azure.Commands.Sql.Common;
-using Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Model;
-using Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Services;
-using Microsoft.Azure.Commands.Sql.Services;
-using Microsoft.Azure.Common.Authentication.Models;
-using Microsoft.Azure.Management.Sql;
-using Microsoft.Azure.Management.Sql.Models;
 
 namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
 {
@@ -38,17 +38,17 @@ namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
         /// <summary>
         /// Gets or sets the Azure profile
         /// </summary>
-        public AzureProfile Profile { get; set; }
+        public IAzureContext Context { get; set; }
 
         /// <summary>
         /// Constructs a Transparent Data Encryption adapter
         /// </summary>
         /// <param name="profile">The current azure profile</param>
         /// <param name="subscription">The current azure subscription</param>
-        public AzureSqlDatabaseTransparentDataEncryptionAdapter(AzureProfile profile, AzureSubscription subscription)
+        public AzureSqlDatabaseTransparentDataEncryptionAdapter(IAzureContext context)
         {
-            Profile = profile;
-            Communicator = new AzureSqlDatabaseTransparentDataEncryptionCommunicator(Profile, subscription);
+            Context = context;
+            Communicator = new AzureSqlDatabaseTransparentDataEncryptionCommunicator(Context);
         }
 
         /// <summary>
@@ -60,7 +60,7 @@ namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
         /// <returns>The Transparent Data Encryption</returns>
         public AzureSqlDatabaseTransparentDataEncryptionModel GetTransparentDataEncryption(string resourceGroupName, string serverName, string databaseName)
         {
-            var resp = Communicator.Get(resourceGroupName, serverName, databaseName, Util.GenerateTracingId());
+            var resp = Communicator.Get(resourceGroupName, serverName, databaseName);
             return CreateTransparentDataEncryptionModelFromResponse(resourceGroupName, serverName, databaseName, resp);
         }
 
@@ -73,25 +73,55 @@ namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
         /// <returns>The updated server model</returns>
         public AzureSqlDatabaseTransparentDataEncryptionModel UpsertTransparentDataEncryption(AzureSqlDatabaseTransparentDataEncryptionModel model)
         {
-            var resp = Communicator.CreateOrUpdate(model.ResourceGroupName, model.ServerName, model.DatabaseName, Util.GenerateTracingId(), new TransparentDataEncryptionCreateOrUpdateParameters()
+            var resp = Communicator.CreateOrUpdate(model.ResourceGroupName, model.ServerName, model.DatabaseName, new TransparentDataEncryptionCreateOrUpdateParameters()
+            {
+                Properties = new TransparentDataEncryptionCreateOrUpdateProperties()
                 {
-                    Properties = new TransparentDataEncryptionCreateOrUpdateProperties()
-                    {
-                        State = model.State.ToString(),
-                    }
-                });
+                    State = model.State.ToString(),
+                }
+            });
 
             return CreateTransparentDataEncryptionModelFromResponse(model.ResourceGroupName, model.ServerName, model.DatabaseName, resp);
         }
 
         /// <summary>
-        /// Convert a Management.Sql.Models.TransparentDataEncryption to AzureSqlDatabaseTransparentDataEncryptionModel
+        /// Gets the encryption protector for the server
+        /// </summary>
+        /// <param name="resourceGroupName">The name of the resource group</param>
+        /// <param name="serverName">The name of the server</param>
+        /// <returns>The encryption protector model</returns>
+        public AzureSqlServerTransparentDataEncryptionProtectorModel GetEncryptionProtector(string resourceGroupName, string serverName)
+        {
+            var resp = Communicator.GetEncryptionProtector(resourceGroupName, serverName);
+            return CreateEncryptionProtectorModelFromResponse(resourceGroupName, serverName, resp);
+        }
+
+        /// <summary>
+        /// Creates or Updates an encryption protector
+        /// </summary>
+        /// <param name="model">The encryption protector model to create or update</param>
+        /// <returns>The created or updated encryption protector model</returns>
+        public AzureSqlServerTransparentDataEncryptionProtectorModel CreateOrUpdateEncryptionProtector(AzureSqlServerTransparentDataEncryptionProtectorModel model)
+        {
+            var resp = Communicator.CreateOrUpdateEncryptionProtector(model.ResourceGroupName, model.ServerName, new EncryptionProtectorCreateOrUpdateParameters()
+            {
+                Properties = new EncryptionProtectorCreateOrUpdateProperties()
+                {
+                    ServerKeyType = model.Type.ToString(),
+                    ServerKeyName = model.ServerKeyVaultKeyName
+                }
+            });
+            return CreateEncryptionProtectorModelFromResponse(model.ResourceGroupName, model.ServerName, resp);
+        }
+
+        /// <summary>
+        /// Convert a Management.Sql.LegacySdk.Models.TransparentDataEncryption to AzureSqlDatabaseTransparentDataEncryptionModel
         /// </summary>
         /// <param name="resourceGroup">The resource group the server is in</param>
         /// <param name="serverName">The name of the server</param>
         /// <param name="resp">The management client server response to convert</param>
         /// <returns>The converted server model</returns>
-        private static AzureSqlDatabaseTransparentDataEncryptionModel CreateTransparentDataEncryptionModelFromResponse(string resourceGroup, string serverName, string databaseName, Management.Sql.Models.TransparentDataEncryption resp)
+        private static AzureSqlDatabaseTransparentDataEncryptionModel CreateTransparentDataEncryptionModelFromResponse(string resourceGroup, string serverName, string databaseName, Management.Sql.LegacySdk.Models.TransparentDataEncryption resp)
         {
             AzureSqlDatabaseTransparentDataEncryptionModel TransparentDataEncryption = new AzureSqlDatabaseTransparentDataEncryptionModel();
 
@@ -107,13 +137,13 @@ namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
         }
 
         /// <summary>
-        /// Convert a Management.Sql.Models.TransparentDataEncryption to AzureSqlDatabaseTransparentDataEncryptionModel
+        /// Convert a Management.Sql.LegacySdk.Models.TransparentDataEncryption to AzureSqlDatabaseTransparentDataEncryptionModel
         /// </summary>
         /// <param name="resourceGroup">The resource group the server is in</param>
         /// <param name="serverName">The name of the server</param>
         /// <param name="resp">The management client server response to convert</param>
         /// <returns>The converted server model</returns>
-        private static AzureSqlDatabaseTransparentDataEncryptionActivityModel CreateTransparentDataEncryptionActivityModelFromResponse(string resourceGroup, string serverName, string databaseName, Management.Sql.Models.TransparentDataEncryptionActivity resp)
+        private static AzureSqlDatabaseTransparentDataEncryptionActivityModel CreateTransparentDataEncryptionActivityModelFromResponse(string resourceGroup, string serverName, string databaseName, Management.Sql.LegacySdk.Models.TransparentDataEncryptionActivity resp)
         {
             AzureSqlDatabaseTransparentDataEncryptionActivityModel TransparentDataEncryptionActivity = new AzureSqlDatabaseTransparentDataEncryptionActivityModel();
 
@@ -140,12 +170,37 @@ namespace Microsoft.Azure.Commands.Sql.TransparentDataEncryption.Adapter
         {
             List<AzureSqlDatabaseTransparentDataEncryptionActivityModel> list = new List<AzureSqlDatabaseTransparentDataEncryptionActivityModel>();
 
-            var resp = Communicator.ListActivity(resourceGroupName, serverName, databaseName, Util.GenerateTracingId());
+            var resp = Communicator.ListActivity(resourceGroupName, serverName, databaseName);
 
             return resp.Select((tdeActivity) =>
             {
                 return CreateTransparentDataEncryptionActivityModelFromResponse(resourceGroupName, serverName, databaseName, tdeActivity);
             }).ToList();
+        }
+
+        /// <summary>
+        /// Convert a Management.Sql.LegacySdk.Models.TransparentDataEncryption.EncryptionProtector to AzureSqlServerTransparentDataEncryptionProtectorModel
+        /// </summary>
+        /// <param name="resourceGroup">The resource group the server is in</param>
+        /// <param name="serverName">The name of the server</param>
+        /// <param name="resp">The management client server response to convert</param>
+        /// <returns>The converted server model</returns>
+        private static AzureSqlServerTransparentDataEncryptionProtectorModel CreateEncryptionProtectorModelFromResponse(string resourceGroup, string serverName, EncryptionProtector resp)
+        {
+            AzureSqlServerTransparentDataEncryptionProtectorModel EncryptionProtector = new AzureSqlServerTransparentDataEncryptionProtectorModel();
+            EncryptionProtector.ResourceGroupName = resourceGroup;
+            EncryptionProtector.ServerName = serverName;
+            EncryptionProtector.ServerKeyVaultKeyName = resp.Properties.ServerKeyName;
+            Model.EncryptionProtectorType type = Model.EncryptionProtectorType.ServiceManaged;
+            Enum.TryParse<Model.EncryptionProtectorType>(resp.Properties.ServerKeyType, true, out type);
+            EncryptionProtector.Type = type;
+
+            if (type == Model.EncryptionProtectorType.AzureKeyVault)
+            {
+                EncryptionProtector.KeyId = resp.Properties.Uri;
+            }
+
+            return EncryptionProtector;
         }
     }
 }

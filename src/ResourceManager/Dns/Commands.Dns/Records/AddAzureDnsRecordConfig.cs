@@ -12,13 +12,11 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Management.Automation;
 using Microsoft.Azure.Commands.Dns.Models;
 using Microsoft.Azure.Management.Dns.Models;
-
+using System;
+using System.Collections.Generic;
+using System.Management.Automation;
 using ProjectResources = Microsoft.Azure.Commands.Dns.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.Dns
@@ -26,9 +24,11 @@ namespace Microsoft.Azure.Commands.Dns
     /// <summary>
     /// Adds a record to a record set object.
     /// </summary>
-    [Cmdlet(VerbsCommon.Add, "AzureDnsRecordConfig"), OutputType(typeof(DnsRecordSet))]
+    [Cmdlet(VerbsCommon.Add, "AzureRmDnsRecordConfig"), OutputType(typeof(DnsRecordSet))]
     public class AddAzureDnsRecordConfig : DnsBaseCmdlet
     {
+        private const string ParameterSetCaa = "Caa";
+
         [Parameter(Mandatory = true, ValueFromPipeline = true, HelpMessage = "The record set in which to add the record.")]
         [ValidateNotNullOrEmpty]
         public DnsRecordSet RecordSet { get; set; }
@@ -59,6 +59,7 @@ namespace Microsoft.Azure.Commands.Dns
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The text value for the TXT record to add.", ParameterSetName = "TXT")]
         [ValidateNotNullOrEmpty]
+        [ValidateLength(DnsClient.TxtRecordMinLength, DnsClient.TxtRecordMaxLength)]
         public string Value { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The priority value SRV record to add.", ParameterSetName = "SRV")]
@@ -80,6 +81,21 @@ namespace Microsoft.Azure.Commands.Dns
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The canonical name for the CNAME record to add. Must not be relative to the name of the zone. Must not have a terminating dot", ParameterSetName = "CNAME")]
         [ValidateNotNullOrEmpty]
         public string Cname { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The flags for the CAA record to add. Must be a number between 0 and 255.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNullOrEmpty]
+        public byte CaaFlags { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The tag field of the CAA record to add.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNullOrEmpty]
+        public string CaaTag { get; set; }
+
+        [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The value field for the CAA record to add.", ParameterSetName = ParameterSetCaa)]
+        [ValidateNotNull]
+        [AllowEmptyString]
+        [ValidateLength(DnsRecordBase.CaaRecordMinLength, DnsRecordBase.CaaRecordMaxLength)]
+        public string CaaValue { get; set; }
+
 
         public override void ExecuteCmdlet()
         {
@@ -129,17 +145,35 @@ namespace Microsoft.Azure.Commands.Dns
                         result.Records.Add(new TxtRecord { Value = this.Value });
                         break;
                     }
+                case RecordType.PTR:
+                    {
+                        result.Records.Add(new PtrRecord { Ptrdname = this.Ptrdname });
+                        break;
+                    }
                 case RecordType.CNAME:
                     {
-                        if (result.Records.Count == 0)
+                        if (result.Records.Count != 0)
                         {
-                            result.Records.Add(new CnameRecord { Cname = this.Cname });
-                        }
-                        else
-                        {
-                            throw new ArgumentException(ProjectResources.Error_AddRecordMultipleCnames);
+                            var currentCNameRecord = result.Records[0] as CnameRecord;
+                            if (currentCNameRecord == null)
+                            {
+                                throw new ArgumentException(ProjectResources.Error_AddRecordTypeMismatch);
+                            }
+
+                            if (!string.IsNullOrEmpty(currentCNameRecord.Cname))
+                            {
+                                throw new ArgumentException(ProjectResources.Error_AddRecordMultipleCnames);
+                            }
+
+                            result.Records.Clear();
                         }
 
+                        result.Records.Add(new CnameRecord { Cname = this.Cname });
+                        break;
+                    }
+                case RecordType.CAA:
+                    {
+                        result.Records.Add(new CaaRecord { Flags = this.CaaFlags, Tag = this.CaaTag, Value = this.CaaValue});
                         break;
                     }
                 default:

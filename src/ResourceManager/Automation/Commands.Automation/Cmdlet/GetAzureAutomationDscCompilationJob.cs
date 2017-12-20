@@ -12,21 +12,19 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Automation.Common;
+using Microsoft.Azure.Commands.Automation.Model;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.Automation.Common;
-using Microsoft.Azure.Commands.Automation.Model;
-using Microsoft.WindowsAzure.Commands.Utilities.Common;
 
 namespace Microsoft.Azure.Commands.Automation.Cmdlet
 {
     /// <summary>
     /// Gets Azure automation compilation job
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureAutomationDscCompilationJob", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
+    [Cmdlet(VerbsCommon.Get, "AzureRmAutomationDscCompilationJob", DefaultParameterSetName = AutomationCmdletParameterSets.ByAll)]
     [OutputType(typeof(CompilationJob))]
     public class GetAzureAutomationDscCompilationJob : AzureAutomationBaseCmdlet
     {
@@ -49,7 +47,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// </summary> 
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByConfigurationName, Mandatory = false, HelpMessage = "Filter jobs based on their status.")]
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByAll, Mandatory = false, HelpMessage = "Filter jobs based on their status.")]
-        [ValidateSet("Completed", "Failed", "Queued", "Starting", "Resuming", "Running", "Stopped", "Stopping", "Suspended", "Suspending", "Activating")]
+        [ValidateSet("Completed", "Failed", "Queued", "Starting", "Resuming", "Running", "Stopped", "Stopping", "Suspended", "Suspending", "Activating", "New")]
         public string Status { get; set; }
 
         /// <summary> 
@@ -64,13 +62,13 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// </summary> 
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByConfigurationName, Mandatory = false, HelpMessage = "Filter compilation jobs so that the compilation job end time <= EndTime.")]
         [Parameter(ParameterSetName = AutomationCmdletParameterSets.ByAll, Mandatory = false, HelpMessage = "Filter compilation jobs so that the compilation job end time <= EndTime.")]
-        public DateTimeOffset? EndTime { get; set; } 
+        public DateTimeOffset? EndTime { get; set; }
 
         /// <summary>
         /// Execute this cmdlet.
         /// </summary>
         [PermissionSet(SecurityAction.Demand, Name = "FullTrust")]
-        protected override void AutomationExecuteCmdlet()
+        protected override void AutomationProcessRecord()
         {
             IEnumerable<CompilationJob> jobs;
 
@@ -78,19 +76,39 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
             {
                 // ByJobId 
                 jobs = new List<CompilationJob> { this.AutomationClient.GetCompilationJob(this.ResourceGroupName, this.AutomationAccountName, this.Id) };
+
+                this.GenerateCmdletOutput(jobs);
             }
             else if (this.ConfigurationName != null)
             {
-                // ByConfiguration 
-                jobs = this.AutomationClient.ListCompilationJobsByConfigurationName(this.ResourceGroupName, this.AutomationAccountName, this.ConfigurationName, this.StartTime, this.EndTime, this.Status);
+                var nextLink = string.Empty;
+
+                do
+                {
+                    // ByConfiguration 
+                    jobs = this.AutomationClient.ListCompilationJobsByConfigurationName(this.ResourceGroupName, this.AutomationAccountName, this.ConfigurationName, this.StartTime, this.EndTime, this.Status, ref nextLink);
+                    if (jobs != null)
+                    {
+                        this.GenerateCmdletOutput(jobs);
+                    }
+
+                } while (!string.IsNullOrEmpty(nextLink));
             }
             else
             {
-                // ByAll 
-                jobs = this.AutomationClient.ListCompilationJobs(this.ResourceGroupName, this.AutomationAccountName, this.StartTime, this.EndTime, this.Status);
-            }
+                var nextLink = string.Empty;
 
-            this.WriteObject(jobs, true); 
+                do
+                {
+                    // ByAll 
+                    jobs = this.AutomationClient.ListCompilationJobs(this.ResourceGroupName, this.AutomationAccountName, this.StartTime, this.EndTime, this.Status, ref nextLink);
+                    if (jobs != null)
+                    {
+                        this.GenerateCmdletOutput(jobs);
+                    }
+
+                } while (!string.IsNullOrEmpty(nextLink));
+            }
         }
     }
 }

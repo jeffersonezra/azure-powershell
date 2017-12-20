@@ -12,26 +12,29 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Collections;
-using System.Management.Automation;
 using Microsoft.Azure.Commands.Dns.Models;
-using Microsoft.Azure.Commands.Dns.Properties;
-
+using System.Management.Automation;
 using ProjectResources = Microsoft.Azure.Commands.Dns.Properties.Resources;
 
 namespace Microsoft.Azure.Commands.Dns
 {
+    using System;
+    using Rest.Azure;
+    using ResourceManager.Common.ArgumentCompleters;
+
     /// <summary>
     /// Deletes an existing zone.
     /// </summary>
-    [Cmdlet(VerbsCommon.Remove, "AzureDnsZone"), OutputType(typeof(bool))]
+    [Cmdlet(VerbsCommon.Remove, "AzureRmDnsZone", SupportsShouldProcess = true, ConfirmImpact = ConfirmImpact.High),
+        OutputType(typeof(bool))]
     public class RemoveAzureDnsZone : DnsBaseCmdlet
-    {
+    {   
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The full name of the zone (without a terminating dot).", ParameterSetName = "Fields")]
         [ValidateNotNullOrEmpty]
         public string Name { get; set; }
 
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, HelpMessage = "The resource group in which the zone exists.", ParameterSetName = "Fields")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -43,59 +46,57 @@ namespace Microsoft.Azure.Commands.Dns
         public SwitchParameter Overwrite { get; set; }
 
         [Parameter(Mandatory = false, HelpMessage = "Do not ask for confirmation.")]
+        [Obsolete("This parameter is obsolete; use Confirm instead")]
         public SwitchParameter Force { get; set; }
+
 
         [Parameter(Mandatory = false)]
         public SwitchParameter PassThru { get; set; }
 
         public override void ExecuteCmdlet()
         {
-            bool deleted = false;
-            DnsZone zoneToDelete = null;
+            bool deleted = true;
+            bool overwrite = this.Overwrite.IsPresent || this.ParameterSetName != "Object";
 
-            if (this.ParameterSetName == "Fields")
+            if (!string.IsNullOrEmpty(this.Name) && this.Name.EndsWith("."))
             {
-                zoneToDelete = new DnsZone 
-                {
-                    Name = this.Name,
-                    ResourceGroupName = this.ResourceGroupName,
-                    Etag = null,
-                };
+                this.Name = this.Name.TrimEnd('.');
+                this.WriteWarning(string.Format("Modifying zone name to remove terminating '.'.  Zone name used is \"{0}\".", this.Name));
             }
-            else if (this.ParameterSetName == "Object")
+
+            // There is a bug in sdk where it doesn't handle non existing zones on delete. Hence, handling the condition in powershell
+            var zoneToDelete = (this.ParameterSetName != "Object")
+                ? this.DnsClient.GetDnsZoneHandleNonExistentZone(this.Name, this.ResourceGroupName)
+                : this.Zone;
+
+            if (zoneToDelete != null)
             {
-                if ((string.IsNullOrWhiteSpace(this.Zone.Etag) || this.Zone.Etag == "*") && !this.Overwrite.IsPresent)
+                if ((string.IsNullOrWhiteSpace(zoneToDelete.Etag) || zoneToDelete.Etag == "*") && !overwrite)
                 {
                     throw new PSArgumentException(string.Format(ProjectResources.Error_EtagNotSpecified, typeof(DnsZone).Name));
                 }
 
-                zoneToDelete = this.Zone;
-            }
+                if (zoneToDelete.Name != null && zoneToDelete.Name.EndsWith("."))
+                {
+                    zoneToDelete.Name = zoneToDelete.Name.TrimEnd('.');
+                    this.WriteWarning(string.Format("Modifying zone name to remove terminating '.'.  Zone name used is \"{0}\".", zoneToDelete.Name));
+                }
 
-            if (zoneToDelete.Name != null && zoneToDelete.Name.EndsWith("."))
-            {
-                zoneToDelete.Name = zoneToDelete.Name.TrimEnd('.');
-                this.WriteWarning(string.Format("Modifying zone name to remove terminating '.'.  Zone name used is \"{0}\".", zoneToDelete.Name));
-            }
+                ConfirmAction(
+                    ProjectResources.Progress_RemovingZone,
+                    zoneToDelete.Name,
+                () =>
+                {
+                    DnsClient.DeleteDnsZone(zoneToDelete, overwrite);
 
-            bool overwrite = this.Overwrite.IsPresent || this.ParameterSetName != "Object";
+                    WriteVerbose(ProjectResources.Success);
+                    WriteVerbose(string.Format(ProjectResources.Success_RemoveZone, zoneToDelete.Name, zoneToDelete.ResourceGroupName));
 
-            ConfirmAction(
-                Force.IsPresent,
-                string.Format(ProjectResources.Confirm_RemoveZone, zoneToDelete.Name),
-                ProjectResources.Progress_RemovingZone,
-                this.Name,
-                () => { deleted = DnsClient.DeleteDnsZone(zoneToDelete, overwrite); });
-
-            if (deleted)
-            {
-                WriteVerbose(ProjectResources.Success);
-                WriteVerbose(string.Format(ProjectResources.Success_RemoveZone, zoneToDelete.Name, zoneToDelete.ResourceGroupName));
-            }
-
-            if (this.PassThru)
-            {
-                WriteObject(deleted);
+                    if (this.PassThru)
+                    {
+                        WriteObject(deleted);
+                    }
+                });
             }
         }
     }

@@ -12,20 +12,17 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Automation.Model;
 using System;
-using System.Collections.Generic;
 using System.Management.Automation;
 using System.Security.Permissions;
-using Microsoft.Azure.Commands.Automation.Model;
-using Microsoft.Azure.Commands.Automation.Common;
-using System.Collections;
 
 namespace Microsoft.Azure.Commands.Automation.Cmdlet
 {
     /// <summary>
     /// Create a new Module for automation.
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureAutomationModule")]
+    [Cmdlet(VerbsCommon.New, "AzureRmAutomationModule")]
     [OutputType(typeof(Module))]
     public class NewAzureAutomationModule : AzureAutomationBaseCmdlet
     {
@@ -42,16 +39,17 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// </summary>
         [Parameter(Position = 3, Mandatory = true, ValueFromPipelineByPropertyName = true,
             HelpMessage = "The url to a module zip package.")]
+        [Alias("ContentLink")]
         [ValidateNotNullOrEmpty]
-        public Uri ContentLink { get; set; }
+        public Uri ContentLinkUri { get; set; }
 
         /// <summary>
         /// Execute this cmdlet.
         /// </summary>
         [PermissionSet(SecurityAction.Demand, Name = "FullTrust")]
-        protected override void AutomationExecuteCmdlet()
+        protected override void AutomationProcessRecord()
         {
-            var createdModule = this.AutomationClient.CreateModule(this.ResourceGroupName, this.AutomationAccountName, ContentLink, Name);
+            var createdModule = this.AutomationClient.CreateModule(this.ResourceGroupName, this.AutomationAccountName, ContentLinkUri, Name);
             this.WriteObject(createdModule);
         }
     }

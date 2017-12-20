@@ -12,8 +12,7 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using Microsoft.Azure.Commands.ActiveDirectory.Models;
-using Microsoft.Azure.Commands.Resources.Models.ActiveDirectory;
+using Microsoft.Azure.Graph.RBAC.Version1_6.ActiveDirectory;
 using System;
 using System.Collections.Generic;
 using System.Management.Automation;
@@ -23,7 +22,7 @@ namespace Microsoft.Azure.Commands.ActiveDirectory
     /// <summary>
     /// Get AD groups.
     /// </summary>
-    [Cmdlet(VerbsCommon.Get, "AzureADGroup", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADGroup>))]
+    [Cmdlet(VerbsCommon.Get, "AzureRmADGroup", DefaultParameterSetName = ParameterSet.Empty), OutputType(typeof(List<PSADGroup>))]
     public class GetAzureADGroupCommand : ActiveDirectoryBaseCmdlet
     {
         [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true, ParameterSetName = ParameterSet.SearchString,
@@ -40,17 +39,21 @@ namespace Microsoft.Azure.Commands.ActiveDirectory
 
         public override void ExecuteCmdlet()
         {
-            ADObjectFilterOptions options = new ADObjectFilterOptions
+            ExecutionBlock(() =>
             {
-                SearchString = SearchString,
-                Id = ObjectId == Guid.Empty ? null : ObjectId.ToString(),
-                Paging = true
-            };
+                ADObjectFilterOptions options = new ADObjectFilterOptions
+                {
+                    SearchString = SearchString,
+                    Id = ObjectId == Guid.Empty ? null : ObjectId.ToString(),
+                    Paging = true
+                };
 
-            do
-            {
-                WriteObject(ActiveDirectoryClient.FilterGroups(options), true);
-            } while (!string.IsNullOrEmpty(options.NextLink));
+                do
+                {
+                    WriteObject(ActiveDirectoryClient.FilterGroups(options), true);
+                } while (!string.IsNullOrEmpty(options.NextLink));
+
+            });
         }
     }
 }

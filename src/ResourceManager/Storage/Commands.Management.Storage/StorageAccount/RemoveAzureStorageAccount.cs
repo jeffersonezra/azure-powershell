@@ -12,15 +12,16 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
-using System.Management.Automation;
+using Microsoft.Azure.Commands.ResourceManager.Common.ArgumentCompleters;
 using Microsoft.Azure.Management.Storage;
+using System.Management.Automation;
 
 namespace Microsoft.Azure.Commands.Management.Storage
 {
     /// <summary>
     /// Lists all storage services underneath the subscription.
     /// </summary>
-    [Cmdlet(VerbsCommon.Remove, StorageAccountNounStr), OutputType(typeof(AzureOperationResponse))]
+    [Cmdlet(VerbsCommon.Remove, StorageAccountNounStr, SupportsShouldProcess = true)]
     public class RemoveAzureStorageAccountCommand : StorageAccountBaseCmdlet
     {
         [Parameter(
@@ -28,6 +29,7 @@ namespace Microsoft.Azure.Commands.Management.Storage
             Mandatory = true,
             ValueFromPipelineByPropertyName = true,
             HelpMessage = "Resource Group Name.")]
+        [ResourceGroupCompleter]
         [ValidateNotNullOrEmpty]
         public string ResourceGroupName { get; set; }
 
@@ -40,15 +42,27 @@ namespace Microsoft.Azure.Commands.Management.Storage
         [ValidateNotNullOrEmpty]
         public string Name { get; set; }
 
+        [Parameter(HelpMessage = "Force to Delete the Storage Account")]
+        public SwitchParameter Force
+        {
+            get { return force; }
+            set { force = value; }
+        }
+        private bool force = false;
+
         public override void ExecuteCmdlet()
         {
             base.ExecuteCmdlet();
 
-            var op = this.StorageClient.StorageAccounts.Delete(
-                this.ResourceGroupName,
-                this.Name);
-
-            WriteObject(op);
+            if (ShouldProcess(this.Name, "Remove Storage Account"))
+            {
+                if (this.force || ShouldContinue(string.Format("Remove Storage Account '{0}' and all content in it", this.Name), ""))
+                {
+                    this.StorageClient.StorageAccounts.Delete(
+                    this.ResourceGroupName,
+                    this.Name);
+                }
+            }
         }
     }
 }

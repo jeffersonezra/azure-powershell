@@ -1,4 +1,4 @@
-﻿// ----------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------
 //
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,27 +12,29 @@
 // limitations under the License.
 // ----------------------------------------------------------------------------------
 
+using Microsoft.Azure.Commands.Sql.Database.Model;
+using Microsoft.Azure.Commands.ResourceManager.Common.Tags;
+using Microsoft.Rest.Azure;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
-using Hyak.Common;
-using Microsoft.Azure.Commands.Sql.Database.Model;
-using Microsoft.Azure.Commands.Sql.Properties;
+using System.Collections;
 
 namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
 {
     /// <summary>
     /// Cmdlet to create a new Azure Sql Database
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureSqlDatabase",
+    [Cmdlet(VerbsCommon.New, "AzureRmSqlDatabase", SupportsShouldProcess = true,
         ConfirmImpact = ConfirmImpact.Low)]
-    public class NewAzureSqlDatabase : AzureSqlDatabaseCmdletBase
+    public class NewAzureSqlDatabase : AzureSqlDatabaseCmdletBase<AzureSqlDatabaseCreateOrUpdateModel>
     {
         /// <summary>
         /// Gets or sets the name of the database to create.
         /// </summary>
         [Parameter(Mandatory = true,
             HelpMessage = "The name of the Azure SQL Database to create.")]
+        [Alias("Name")]
         [ValidateNotNullOrEmpty]
         public string DatabaseName { get; set; }
 
@@ -85,17 +87,46 @@ namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
         public string ElasticPoolName { get; set; }
 
         /// <summary>
+        /// Gets or sets the read scale option to assign to the Azure SQL Database
+        /// </summary>
+        [Parameter(Mandatory = false,
+            HelpMessage = "The read scale option to assign to the Azure SQL Database.(Enabled/Disabled)")]
+        [ValidateNotNullOrEmpty]
+        public DatabaseReadScale ReadScale { get; set; }
+
+        /// <summary>
         /// Gets or sets the tags associated with the Azure Sql Database
         /// </summary>
         [Parameter(Mandatory = false,
             HelpMessage = "The tags to associate with the Azure Sql Database Server")]
-        public Dictionary<string, string> Tags { get; set; }
+        [Alias("Tag")]
+        public Hashtable Tags { get; set; }
+
+        [Parameter(Mandatory = false,
+            HelpMessage = "The name of the sample schema to apply when creating this database.")]
+        [ValidateSet(Management.Sql.Models.SampleName.AdventureWorksLT)]
+        public string SampleName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the zone redundant option to assign to the Azure SQL Database
+        /// </summary>
+        [Parameter(Mandatory = false,
+            HelpMessage = "The zone redundancy to associate with the Azure Sql Database")]
+        public SwitchParameter ZoneRedundant { get; set; }
+
+        /// <summary>
+        /// Overriding to add warning message
+        /// </summary>
+        public override void ExecuteCmdlet()
+        {
+            base.ExecuteCmdlet();
+        }
 
         /// <summary>
         /// Get the entities from the service
         /// </summary>
         /// <returns>The list of entities</returns>
-        protected override IEnumerable<AzureSqlDatabaseModel> GetEntity()
+        protected override AzureSqlDatabaseCreateOrUpdateModel GetEntity()
         {
             // We try to get the database.  Since this is a create, we don't want the database to exist
             try
@@ -116,7 +147,7 @@ namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
 
             // The database already exists
             throw new PSArgumentException(
-                string.Format(Resources.DatabaseNameExists, this.DatabaseName, this.ServerName),
+                string.Format(Microsoft.Azure.Commands.Sql.Properties.Resources.DatabaseNameExists, this.DatabaseName, this.ServerName),
                 "DatabaseName");
         }
 
@@ -125,11 +156,12 @@ namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
         /// </summary>
         /// <param name="model">Model retrieved from service</param>
         /// <returns>The model that was passed in</returns>
-        protected override IEnumerable<AzureSqlDatabaseModel> ApplyUserInputToModel(IEnumerable<AzureSqlDatabaseModel> model)
+        protected override AzureSqlDatabaseCreateOrUpdateModel ApplyUserInputToModel(AzureSqlDatabaseCreateOrUpdateModel model)
         {
             string location = ModelAdapter.GetServerLocation(ResourceGroupName, ServerName);
-            List<Model.AzureSqlDatabaseModel> newEntity = new List<AzureSqlDatabaseModel>();
-            newEntity.Add(new AzureSqlDatabaseModel()
+            return new AzureSqlDatabaseCreateOrUpdateModel
+            {
+                Database = new AzureSqlDatabaseModel()
                 {
                     Location = location,
                     ResourceGroupName = ResourceGroupName,
@@ -140,10 +172,13 @@ namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
                     Edition = Edition,
                     MaxSizeBytes = MaxSizeBytes,
                     RequestedServiceObjectiveName = RequestedServiceObjectiveName,
-                    Tags = Tags,
+                    Tags = TagsConversionHelper.CreateTagDictionary(Tags, validate: true),
                     ElasticPoolName = ElasticPoolName,
-                });
-            return newEntity;
+                    ReadScale = ReadScale,
+                    ZoneRedundant = MyInvocation.BoundParameters.ContainsKey("ZoneRedundant") ? (bool?)ZoneRedundant.ToBool() : null,
+                },
+                SampleName = SampleName
+            };
         }
 
         /// <summary>
@@ -151,11 +186,36 @@ namespace Microsoft.Azure.Commands.Sql.Database.Cmdlet
         /// </summary>
         /// <param name="entity">The output of apply user input to model</param>
         /// <returns>The input entity</returns>
-        protected override IEnumerable<AzureSqlDatabaseModel> PersistChanges(IEnumerable<AzureSqlDatabaseModel> entity)
+        protected override AzureSqlDatabaseCreateOrUpdateModel PersistChanges(AzureSqlDatabaseCreateOrUpdateModel entity)
         {
-            return new List<AzureSqlDatabaseModel>() {
-                ModelAdapter.UpsertDatabase(this.ResourceGroupName, this.ServerName, entity.First())
+            // Use AutoRest or Hyak SDK depending on model parameters.
+            // This is done because we want to add support for -SampleName, which is only supported by AutoRest SDK.
+            // Why not always use AutoRest SDK? Because it uses Azure-AsyncOperation polling, while Hyak uses
+            // Location polling. This means that switching to AutoRest requires re-recording almost all scenario tests,
+            // which currently is quite difficult.
+            AzureSqlDatabaseModel upsertedDatabase;
+            if (!string.IsNullOrEmpty(entity.SampleName) || entity.Database.ZoneRedundant.HasValue)
+            {
+                upsertedDatabase = ModelAdapter.UpsertDatabaseWithNewSdk(this.ResourceGroupName, this.ServerName, entity);
+            }
+            else
+            {
+                upsertedDatabase = ModelAdapter.UpsertDatabase(this.ResourceGroupName, this.ServerName, entity);
+            }
+
+            return new AzureSqlDatabaseCreateOrUpdateModel
+            {
+                Database = upsertedDatabase      
             };
+        }
+
+        /// <summary>
+        /// Strips away the create or update properties from the model so that just the regular properties
+        /// are written to cmdlet output.
+        /// </summary>
+        protected override object TransformModelToOutputObject(AzureSqlDatabaseCreateOrUpdateModel model)
+        {
+            return model.Database;
         }
     }
 }

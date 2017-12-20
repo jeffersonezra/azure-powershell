@@ -25,6 +25,9 @@ namespace Microsoft.Azure.Commands.RecoveryServices
     /// </summary>
     [Cmdlet(VerbsCommon.Set, "AzureSiteRecoveryVM")]
     [OutputType(typeof(ASRJob))]
+    [Obsolete("This cmdlet has been marked for deprecation in an upcoming release. Please use the " +
+        "equivalent cmdlet from the AzureRm.RecoveryServices.SiteRecovery module instead.",
+        false)]
     public class SetAzureSiteRecoveryVirtualMachine : RecoveryServicesCmdletBase
     {
         #region Parameters
@@ -74,6 +77,11 @@ namespace Microsoft.Azure.Commands.RecoveryServices
         /// </summary>
         public override void ExecuteCmdlet()
         {
+            this.WriteWarningWithTimestamp(
+                string.Format(
+                    Properties.Resources.CmdletWillBeDeprecatedSoon,
+                    this.MyInvocation.MyCommand.Name));
+
             // Check for at least one option
             if (string.IsNullOrEmpty(this.Name) && 
                 string.IsNullOrEmpty(this.Size) && 

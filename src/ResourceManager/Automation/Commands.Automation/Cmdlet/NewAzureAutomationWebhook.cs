@@ -14,9 +14,8 @@
 
 using Microsoft.Azure.Commands.Automation.Model;
 using Microsoft.Azure.Commands.Automation.Properties;
-using Microsoft.WindowsAzure.Commands.Common;
 using System;
-using System.Collections.Generic;
+using System.Collections;
 using System.Management.Automation;
 using System.Security.Permissions;
 
@@ -25,7 +24,7 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
     /// <summary>
     /// Create a new Webhook for automation.
     /// </summary>
-    [Cmdlet(VerbsCommon.New, "AzureAutomationWebhook")]
+    [Cmdlet(VerbsCommon.New, "AzureRmAutomationWebhook", SupportsShouldProcess = true)]
     [OutputType(typeof(Webhook))]
     public class NewAzureAutomationWebhook : AzureAutomationBaseCmdlet
     {
@@ -64,18 +63,26 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
         /// <summary>
         /// Gets or sets the Runbook parameters
         /// </summary>
-        [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true,
+        [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = false,
             HelpMessage = "The Runbook parameters name/value.")]
-        public IDictionary<string, string> Parameters { get; set; }
+        public IDictionary Parameters { get; set; }
 
         [Parameter(Mandatory = false, HelpMessage = "Skip warning message about one-time viewable webhook URL")]
         public SwitchParameter Force { get; set; }
 
         /// <summary>
+        /// Gets or sets the optional hybrid agent friendly name upon which the runbook should be executed.
+        /// </summary>
+        [Parameter(Mandatory = false, 
+            HelpMessage = "Optional name of the hybrid agent which should execute the runbook")]
+        [Alias("HybridWorker")]
+        public string RunOn { get; set; }
+
+        /// <summary>
         /// Execute this cmdlet.
         /// </summary>
         [PermissionSet(SecurityAction.Demand, Name = "FullTrust")]
-        protected override void AutomationExecuteCmdlet()
+        protected override void AutomationProcessRecord()
         {
             this.ConfirmAction(
                 Force.IsPresent,
@@ -91,7 +98,8 @@ namespace Microsoft.Azure.Commands.Automation.Cmdlet
                         this.RunbookName,
                         this.IsEnabled,
                         this.ExpiryTime,
-                        this.Parameters.ToHashtable())));
+                        this.Parameters,
+                        this.RunOn)));
 
         }
     }

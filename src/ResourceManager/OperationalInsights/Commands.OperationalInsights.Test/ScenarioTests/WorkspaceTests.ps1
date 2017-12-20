@@ -22,24 +22,27 @@ function Test-WorkspaceCreateUpdateDelete
     $rgname = Get-ResourceGroupName
     $wslocation = Get-ProviderLocation
     
-    New-AzureResourceGroup -Name $rgname -Location $wslocation -Force
+    New-AzureRmResourceGroup -Name $rgname -Location $wslocation -Force
 
     # Create and get a workspace
-    $workspace = New-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku free -Tags @{"tag1" = "val1"} -Force
+    $workspace = New-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku "STANDARD" -Tags @{"tag1" = "val1"} -Force
     Assert-AreEqual $rgname $workspace.ResourceGroupName
     Assert-AreEqual $wsname $workspace.Name
     Assert-AreEqual $wslocation $workspace.Location
-    Assert-AreEqual "free" $workspace.Sku
+    Assert-AreEqual "STANDARD" $workspace.Sku
+    # if no value for RetentionInDays is specified, use the default value for the sku. For standard, the default is 30.
+    Assert-AreEqual 30 $workspace.RetentionInDays
     Assert-NotNull $workspace.ResourceId
     Assert-AreEqual 1 $workspace.Tags.Count
     Assert-NotNull $workspace.CustomerId
     Assert-NotNull $workspace.PortalUrl
 
-    $workspace = Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname
+    $workspace = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname
     Assert-AreEqual $rgname $workspace.ResourceGroupName
     Assert-AreEqual $wsname $workspace.Name
     Assert-AreEqual $wslocation $workspace.Location
-    Assert-AreEqual "free" $workspace.Sku
+    Assert-AreEqual "STANDARD" $workspace.Sku
+    Assert-AreEqual 30 $workspace.RetentionInDays
     Assert-NotNull $workspace.ResourceId
     Assert-AreEqual 1 $workspace.Tags.Count
     Assert-NotNull $workspace.CustomerId
@@ -47,46 +50,47 @@ function Test-WorkspaceCreateUpdateDelete
 
     # Create a second workspace for list testing
     $wstwoname = Get-ResourceName
-    $workspacetwo = New-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wstwoname -Location $wslocation -Force
-    
+    $workspacetwo = New-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wstwoname -Location $wslocation -Sku "PerNode" -RetentionInDays 60 -Force
+
+    $workspacetwo = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wstwoname
+    Assert-AreEqual 60 $workspacetwo.RetentionInDays
+
     # List the workspaces in the subscription
-    $workspaces = Get-AzureOperationalInsightsWorkspace
-    Assert-AreEqual 2 $workspaces.Count
+    $workspaces = Get-AzureRmOperationalInsightsWorkspace
     Assert-AreEqual 1 ($workspaces | Where {$_.Name -eq $wsname}).Count
     Assert-AreEqual 1 ($workspaces | Where {$_.Name -eq $wstwoname}).Count
     
     # List the workspaces in the resource group
-    $workspaces = Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname
-    Assert-AreEqual 2 $workspaces.Count
+    $workspaces = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname
     Assert-AreEqual 1 ($workspaces | Where {$_.Name -eq $wsname}).Count
     Assert-AreEqual 1 ($workspaces | Where {$_.Name -eq $wstwoname}).Count
 
     # Delete the second workspace
-    Remove-AzureOperationalInsightsWorkspace -ResourceGroupName $rgName -Name $wstwoname -Force
-    Assert-ThrowsContains { Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wstwoname } "ResourceNotFound"
-    $workspaces = Get-AzureOperationalInsightsWorkspace
-    Assert-AreEqual 1 $workspaces.Count
+    Remove-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgName -Name $wstwoname -Force
+    Assert-ThrowsContains { Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wstwoname } "NotFound"
+    $workspaces = Get-AzureRmOperationalInsightsWorkspace
     Assert-AreEqual 1 ($workspaces | Where {$_.Name -eq $wsname}).Count
     Assert-AreEqual 0 ($workspaces | Where {$_.Name -eq $wstwoname}).Count
 
     # Update the tags on the workspace
-    $workspace = Set-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Tags @{"foo" = "bar"; "foo2" = "bar2"}
+    $workspace = Set-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Tags @{"foo" = "bar"; "foo2" = "bar2"}
     Assert-AreEqual 2 $workspace.Tags.Count
 
-    $workspace = $workspace | New-AzureOperationalInsightsWorkspace -Tags @{"foo" = "bar"} -Force
+    $workspace = $workspace | New-AzureRmOperationalInsightsWorkspace -Tags @{"foo" = "bar"} -Force
     Assert-AreEqual 1 $workspace.Tags.Count
 
-    # Clear the tags and update the sku via piping
-    $workspace | Set-AzureOperationalInsightsWorkspace -Tags @{} -Sku standard
-    $workspace = Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname
+    # Clear the tags and update the sku, RetentionInDays via piping
+    $workspace | Set-AzureRmOperationalInsightsWorkspace -Tags @{} -Sku standalone -RetentionInDays 123
+    $workspace = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname
     Assert-AreEqual 0 $workspace.Tags.Count
-    Assert-AreEqual standard $workspace.Sku
+    Assert-AreEqual standalone $workspace.Sku
+    Assert-AreEqual 123 $workspace.RetentionInDays
 
     # Delete the original workspace via piping
-    $workspace | Remove-AzureOperationalInsightsWorkspace -Force
-    $workspaces = Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname
+    $workspace | Remove-AzureRmOperationalInsightsWorkspace -Force
+    $workspaces = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname
     Assert-AreEqual 0 $workspaces.Count
-    Assert-ThrowsContains { Get-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name wsname } "ResourceNotFound"
+    Assert-ThrowsContains { Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name wsname } "NotFound"
 }
 
 <#
@@ -99,36 +103,36 @@ function Test-WorkspaceActions
     $rgname = Get-ResourceGroupName
     $wslocation = Get-ProviderLocation
     
-    New-AzureResourceGroup -Name $rgname -Location $wslocation -Force
+    New-AzureRmResourceGroup -Name $rgname -Location $wslocation -Force
 
     # Query link targets for an identity
-    $accounts = Get-AzureOperationalInsightsLinkTargets
+    $accounts = Get-AzureRmOperationalInsightsLinkTargets
     Assert-AreEqual 0 $accounts.Count
 
     # Attempt to link a workspace to an invalid account
-    Assert-ThrowsContains { New-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -CustomerId ([guid]::NewGuid()) } "not a valid link target"
+    Assert-ThrowsContains { New-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku "STANDARD" -CustomerId ([guid]::NewGuid()) } "BadRequest"
 
     # Create a real workspace for use in the rest of the test
-    $workspace = New-AzureOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku "STANDARD" -Tags @{"tag1" = "val1"} -Force
+    $workspace = New-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku "STANDARD" -Tags @{"tag1" = "val1"} -Force
 
     # Get the shared keys (both param sets)
-    $keys = Get-AzureOperationalInsightsWorkspaceSharedKeys -ResourceGroupName $rgname -Name $wsname
+    $keys = Get-AzureRmOperationalInsightsWorkspaceSharedKeys -ResourceGroupName $rgname -Name $wsname
     Assert-NotNull $keys.PrimarySharedKey
     Assert-NotNull $keys.SecondarySharedKey
 
-    $keys = $workspace | Get-AzureOperationalInsightsWorkspaceSharedKeys
+    $keys = $workspace | Get-AzureRmOperationalInsightsWorkspaceSharedKeys
     Assert-NotNull $keys.PrimarySharedKey
     Assert-NotNull $keys.SecondarySharedKey
 
     # List the management groups (both param sets)
-    $mgs = Get-AzureOperationalInsightsWorkspaceManagementGroups -ResourceGroupName $rgname -Name $wsname
+    $mgs = Get-AzureRmOperationalInsightsWorkspaceManagementGroups -ResourceGroupName $rgname -Name $wsname
     Assert-AreEqual 0 $mgs.Count
 
-    $mgs = $workspace | Get-AzureOperationalInsightsWorkspaceManagementGroups
+    $mgs = $workspace | Get-AzureRmOperationalInsightsWorkspaceManagementGroups
     Assert-AreEqual 0 $mgs.Count
 
     # List the usages for a workspace (both param sets)
-    $usages = Get-AzureOperationalInsightsWorkspaceUsage -ResourceGroupName $rgname -Name $wsname
+    $usages = Get-AzureRmOperationalInsightsWorkspaceUsage -ResourceGroupName $rgname -Name $wsname
     Assert-AreEqual 1 $usages.Count
     Assert-AreEqual "DataAnalyzed" $usages[0].Id
     Assert-NotNull $usages[0].Name
@@ -136,11 +140,78 @@ function Test-WorkspaceActions
     Assert-AreEqual "Bytes" $usages[0].Unit
     Assert-AreEqual ([Timespan]::FromDays(1)) $usages[0].QuotaPeriod
 
-    $usages = $workspace | Get-AzureOperationalInsightsWorkspaceUsage
+    $usages = $workspace | Get-AzureRmOperationalInsightsWorkspaceUsage
     Assert-AreEqual 1 $usages.Count
     Assert-AreEqual "DataAnalyzed" $usages[0].Id
     Assert-NotNull $usages[0].Name
     Assert-NotNull $usages[0].NextResetTime
     Assert-AreEqual "Bytes" $usages[0].Unit
     Assert-AreEqual ([Timespan]::FromDays(1)) $usages[0].QuotaPeriod
+}
+
+<#
+.SYNOPSIS
+Enable, disable, and list intelligence packs and verify the results
+#>
+function Test-WorkspaceEnableDisableListIntelligencePacks
+{
+
+    $wsname = Get-ResourceName
+    $rgname = Get-ResourceGroupName
+    $wslocation = Get-ProviderLocation
+
+	New-AzureRmResourceGroup -Name $rgname -Location $wslocation -Force
+
+	# Create and get a workspace
+    $workspace = New-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name $wsname -Location $wslocation -Sku "STANDARD" -Tags @{"tag1" = "val1"} -Force
+    Assert-AreEqual $rgname $workspace.ResourceGroupName
+    Assert-AreEqual $wsname $workspace.Name
+    Assert-AreEqual $wslocation $workspace.Location
+    Assert-AreEqual "STANDARD" $workspace.Sku
+    Assert-NotNull $workspace.ResourceId
+    Assert-AreEqual 1 $workspace.Tags.Count
+    Assert-NotNull $workspace.CustomerId
+    Assert-NotNull $workspace.PortalUrl
+
+    # Enable intelligence packs
+	Set-AzureRmOperationalInsightsIntelligencePack -ResourceGroupName $rgname -WorkspaceName $wsname -IntelligencePackName "ChangeTracking" -Enabled $true
+	Set-AzureRmOperationalInsightsIntelligencePack -ResourceGroupName $rgname -WorkspaceName $wsname -IntelligencePackName "SiteRecovery" -Enabled $true
+
+	# List to verify that the IP's have been enabled
+	$ipList = Get-AzureRmOperationalInsightsIntelligencePacks -ResourceGroupName $rgname -WorkspaceName $wsname
+	Foreach ($ip in $ipList)
+	{
+		if (($ip.Name -eq "ChangeTracking") -or ($ip.Name -eq "SiteRecovery") -or ($ip.Name -eq "LogManagement"))
+		{
+			Assert-AreEqual $ip.Enabled $true
+		}
+		else
+		{
+			Assert-AreEqual $ip.Enabled $false
+		}
+	}
+
+	# Disable intelligence packs
+	Set-AzureRmOperationalInsightsIntelligencePack -ResourceGroupName $rgname -WorkspaceName $wsname -IntelligencePackName "ChangeTracking" -Enabled $false
+	Set-AzureRmOperationalInsightsIntelligencePack -ResourceGroupName $rgname -WorkspaceName $wsname -IntelligencePackName "SiteRecovery" -Enabled $false
+
+	# List to verify that the IP's have been disabled
+	$ipList = Get-AzureRmOperationalInsightsIntelligencePacks -ResourceGroupName $rgname -WorkspaceName $wsname
+	Foreach ($ip in $ipList)
+	{
+		if ($ip.Name -eq "LogManagement")
+		{
+			Assert-AreEqual $ip.Enabled $true
+		}
+		else
+		{
+			Assert-AreEqual $ip.Enabled $false
+		}
+	}
+
+	# Delete the original workspace via piping
+    $workspace | Remove-AzureRmOperationalInsightsWorkspace -Force
+    $workspaces = Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname
+    Assert-AreEqual 0 $workspaces.Count
+    Assert-ThrowsContains { Get-AzureRmOperationalInsightsWorkspace -ResourceGroupName $rgname -Name wsname } "NotFound"
 }
